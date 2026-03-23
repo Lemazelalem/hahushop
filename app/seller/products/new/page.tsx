@@ -33,6 +33,19 @@ import {
   Info,
 } from "lucide-react";
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function validateImageFile(file: File): string | null {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return `"${file.name}" is not a supported image format. Use PNG, JPG, WebP, or GIF.`;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return `"${file.name}" exceeds 5MB. Please use a smaller image.`;
+  }
+  return null;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CategoryRow = { id: string; name: string; slug: string };
@@ -1237,7 +1250,8 @@ export default function NewProductPage() {
       setHasSizes(true);
       setSizeVariants((prev) => buildMergedOptionVariants(prev, nextOptionValues));
     }
-  }, [selectedProductType]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-runs when product type changes, not when colorVariants changes (would cause infinite loop)
+  }, [selectedProductType]);
 
   // ── Initial load ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1292,6 +1306,9 @@ export default function NewProductPage() {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
+    const fileErr = validateImageFile(file);
+    if (fileErr) { setImageError(fileErr); e.target.value = ""; return; }
+
     setImageError(null);
     setImageUploading(true);
 
@@ -1313,12 +1330,24 @@ export default function NewProductPage() {
     const files = e.target.files;
     if (!files || !userId) return;
 
+    const skippedNames: string[] = [];
+    const validFiles: File[] = [];
+    for (const file of Array.from(files)) {
+      const fileErr = validateImageFile(file);
+      if (fileErr) { skippedNames.push(file.name); } else { validFiles.push(file); }
+    }
+    if (skippedNames.length > 0 && validFiles.length === 0) {
+      setExtraImageError(`Rejected: ${skippedNames.join(", ")}. Use PNG/JPG/WebP under 5MB.`);
+      e.target.value = "";
+      return;
+    }
+
     setExtraImageError(null);
     setExtraImageUploading(true);
 
     const newUrls: string[] = [];
 
-    for (const file of Array.from(files)) {
+    for (const file of validFiles) {
       try {
         const ext = file.name.split(".").pop() || "jpg";
         const path = `seller-${userId}/extra-${Date.now()}-${uid()}.${ext}`;
@@ -1420,6 +1449,13 @@ export default function NewProductPage() {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
+    const fileErr = validateImageFile(file);
+    if (fileErr) {
+      setPageError(fileErr);
+      e.target.value = "";
+      return;
+    }
+
     setColorImageUploading((p) => ({ ...p, [colorId]: true }));
     try {
       const ext = file.name.split(".").pop() || "jpg";
@@ -1445,10 +1481,20 @@ export default function NewProductPage() {
     const files = e.target.files;
     if (!files || !userId) return;
 
+    const validFiles: File[] = [];
+    for (const file of Array.from(files)) {
+      if (!validateImageFile(file)) validFiles.push(file);
+    }
+    if (validFiles.length === 0) {
+      setPageError("No valid images selected. Use PNG/JPG/WebP under 5MB.");
+      e.target.value = "";
+      return;
+    }
+
     setColorExtraUploading((p) => ({ ...p, [colorId]: true }));
     const newUrls: string[] = [];
 
-    for (const file of Array.from(files)) {
+    for (const file of validFiles) {
       try {
         const ext = file.name.split(".").pop() || "jpg";
         const path = `seller-${userId}/color-${colorId}-extra-${Date.now()}-${uid()}.${ext}`;
@@ -1540,6 +1586,7 @@ export default function NewProductPage() {
     if (!userId) return "You must be signed in.";
     if (!isApprovedSeller) return "Account not approved.";
     if (!name.trim()) return "Enter product name.";
+    if (!description.trim()) return "Enter a product description for admin review.";
     if (!categoryId) return "Select category.";
 
     if (availableBranches.length > 0 && !branchSlug) {
@@ -1556,6 +1603,9 @@ export default function NewProductPage() {
 
     if (!hasSizes && (!stockQuantity || Number(stockQuantity) < 0)) {
       return "Enter a valid stock quantity.";
+    }
+    if (!hasSizes && Number(stockQuantity) > 100000) {
+      return "Stock quantity seems too high (max 100,000).";
     }
 
     if (hasColors) {
@@ -1612,6 +1662,7 @@ export default function NewProductPage() {
         description: description.trim() || null,
         emoji: emoji.trim() || "🛍️",
         status: "draft" as ProductStatus,
+        seller_price_cents: cents,
         price_cents: cents,
         final_price_cents: cents,
         image_url: imageUrl,
@@ -1733,12 +1784,12 @@ export default function NewProductPage() {
           </div>
         )}
 
-        <form onSubmit={handleCreateDraft} onChange={() => setIsDirty(true)}>
+        <form onSubmit={handleCreateDraft}>
           <div className="rounded-3xl border border-slate-700/50 bg-slate-900/50 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
             <div className="flex flex-col lg:flex-row">
               {/* Sidebar / mobile steps */}
               <div className="lg:w-64 border-b lg:border-b-0 lg:border-r border-slate-700/50 bg-slate-950/30 p-3 sm:p-4">
-                <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible scrollbar-hide">
+                <nav className="flex lg:flex-col gap-1 lg:gap-2 overflow-x-auto lg:overflow-visible scrollbar-hide">
                   {(Object.keys(sectionConfig) as Section[]).map((section) => {
                     const { icon: Icon, label, color } = sectionConfig[section];
                     const isActive = activeSection === section;
@@ -1753,15 +1804,15 @@ export default function NewProductPage() {
                         type="button"
                         onClick={() => setActiveSection(section)}
                         className={classNames(
-                          "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all whitespace-nowrap shrink-0",
+                          "flex items-center justify-center lg:justify-start gap-1.5 lg:gap-3 flex-1 lg:flex-none px-2 lg:px-4 py-2.5 lg:py-3 rounded-xl text-xs lg:text-sm font-medium transition-all whitespace-nowrap",
                           isActive
                             ? "bg-gradient-to-r text-slate-900 shadow-lg"
                             : "text-slate-400 hover:text-white hover:bg-slate-800/50",
                           isActive && color
                         )}
                       >
-                        <Icon className="w-4 h-4" />
-                        <span className="flex-1 text-left">{label}</span>
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="lg:flex-1 lg:text-left">{label}</span>
                         {badge !== null && badge > 0 && (
                           <span
                             className={classNames(
@@ -1820,7 +1871,7 @@ export default function NewProductPage() {
                           className={INPUT}
                           placeholder="Premium Wireless Headphones"
                           value={name}
-                          onChange={(e) => setName(e.target.value.slice(0, 120))}
+                          onChange={(e) => { setName(e.target.value.slice(0, 120)); setIsDirty(true); }}
                           disabled={!isApprovedSeller || saving}
                         />
                         <div className="flex items-center gap-2 mt-2">
@@ -1841,7 +1892,7 @@ export default function NewProductPage() {
                           <input
                             className="w-20 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-center text-2xl outline-none focus:border-lime-400"
                             value={emoji}
-                            onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+                            onChange={(e) => { setEmoji(e.target.value.slice(0, 4)); setIsDirty(true); }}
                             maxLength={4}
                             disabled={!isApprovedSeller || saving}
                           />
@@ -1997,7 +2048,7 @@ export default function NewProductPage() {
                         className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder:text-slate-500 focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 transition-all outline-none min-h-[120px] resize-y"
                         placeholder="Describe features, specifications, and benefits..."
                         value={description}
-                        onChange={(e) => setDescription(e.target.value.slice(0, 800))}
+                        onChange={(e) => { setDescription(e.target.value.slice(0, 800)); setIsDirty(true); }}
                         disabled={!isApprovedSeller || saving}
                       />
                       <div className="flex justify-end mt-1">
@@ -2031,10 +2082,13 @@ export default function NewProductPage() {
                             ETB
                           </span>
                           <input
-                            className="w-full rounded-xl border border-slate-700 bg-slate-800/50 pl-14 pr-4 py-3 text-white focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 outline-none transition-all"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-full rounded-xl border border-slate-700 bg-slate-800/50 pl-14 pr-4 py-3 text-white focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             placeholder="0.00"
                             value={sellerPrice}
-                            onChange={(e) => setSellerPrice(e.target.value.slice(0, 16))}
+                            onChange={(e) => { setSellerPrice(e.target.value.slice(0, 16)); setIsDirty(true); }}
                             disabled={!isApprovedSeller || saving}
                           />
                         </div>
@@ -2061,10 +2115,11 @@ export default function NewProductPage() {
                             <input
                               type="number"
                               min="0"
+                              max="100000"
                               className={INPUT}
                               placeholder="0"
                               value={stockQuantity}
-                              onChange={(e) => setStockQuantity(e.target.value)}
+                              onChange={(e) => { setStockQuantity(e.target.value); setIsDirty(true); }}
                               disabled={!isApprovedSeller || saving}
                             />
                             {stockQuantity !== "" && Number(stockQuantity) === 0 && (

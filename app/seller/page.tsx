@@ -18,6 +18,7 @@ import {
   DollarSign,
   Calendar,
   ChevronRight,
+  ChevronDown,
   Box,
   FileText,
   Settings,
@@ -98,6 +99,10 @@ export default function SellerDashboardPage() {
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProductStatus | "all">("all");
+  const [showEarnings, setShowEarnings] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [showQuickLinks, setShowQuickLinks] = useState(false);
+  const [showSales, setShowSales] = useState(false);
   
   const [verification, setVerification] = useState<SellerVerificationInfo>({
     status: "none",
@@ -482,26 +487,7 @@ export default function SellerDashboardPage() {
       );
     }
 
-    return (
-      <div className="glass-morphism rounded-2xl p-5 border-l-4 border-emerald-400 bg-gradient-to-r from-emerald-50/80 to-white/60">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-slate-900">Verified Seller ✅</h3>
-            <p className="text-sm text-slate-600 mt-1">
-              Your account is verified. Your products can now be approved for the public shop.
-            </p>
-            {v.reviewed_at && (
-              <p className="text-xs text-emerald-600 mt-2">
-                Verified on {formatDate(v.reviewed_at)}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   };
 
   if (loading) {
@@ -592,82 +578,118 @@ export default function SellerDashboardPage() {
       </header>
 
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Welcome + Verification */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
+        {/* Welcome + Quick Stats (compact on mobile) */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
+              <h2 className="text-lg md:text-3xl font-bold text-slate-900">
                 Welcome back! 👋
               </h2>
-              <p className="text-slate-600 mt-1">
+              <p className="text-slate-600 text-xs md:text-base mt-0.5">
                 Here's what's happening with your store today.
               </p>
             </div>
-            {renderVerificationCard()}
+            {/* Inline mini stats on mobile */}
+            <div className="flex md:hidden gap-2">
+              <div className="text-center px-3 py-1.5 rounded-xl bg-white/60 border border-slate-200/40">
+                <span className="text-lg font-bold text-slate-900 block leading-tight">{stats.total}</span>
+                <span className="text-[9px] text-slate-500">Products</span>
+              </div>
+              <div className="text-center px-3 py-1.5 rounded-xl bg-emerald-50/60 border border-emerald-200/40">
+                <span className="text-lg font-bold text-emerald-700 block leading-tight">{stats.approved}</span>
+                <span className="text-[9px] text-emerald-600">Live</span>
+              </div>
+              <div className="text-center px-3 py-1.5 rounded-xl bg-sky-50/60 border border-sky-200/40">
+                <span className="text-lg font-bold text-sky-700 block leading-tight">{stats.submitted}</span>
+                <span className="text-[9px] text-sky-600">Pending</span>
+              </div>
+            </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="glass-morphism rounded-2xl p-5 space-y-4">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-lime-600" />
-              Performance
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white/60">
-                <span className="text-sm text-slate-600">Total Products</span>
-                <span className="text-xl font-bold text-slate-900">{stats.total}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60">
-                <span className="text-sm text-emerald-700">Approved</span>
-                <span className="text-xl font-bold text-emerald-700">{stats.approved}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-xl bg-sky-50/60">
-                <span className="text-sm text-sky-700">Pending Review</span>
-                <span className="text-xl font-bold text-sky-700">{stats.submitted}</span>
+          {renderVerificationCard()}
+
+          {/* Desktop Performance Card */}
+          <div className="hidden md:grid grid-cols-3 gap-6">
+            <div className="glass-morphism rounded-2xl p-5 space-y-4 col-span-1">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-lime-600" />
+                Performance
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white/60">
+                  <span className="text-sm text-slate-600">Total Products</span>
+                  <span className="text-xl font-bold text-slate-900">{stats.total}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60">
+                  <span className="text-sm text-emerald-700">Approved</span>
+                  <span className="text-xl font-bold text-emerald-700">{stats.approved}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-sky-50/60">
+                  <span className="text-sm text-sky-700">Pending Review</span>
+                  <span className="text-xl font-bold text-sky-700">{stats.submitted}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Earnings Overview */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-amber-400">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending Payout</p>
-                <p className="text-2xl font-bold text-amber-900 mt-1">{formatMoney(payoutTotals.totalPendingCents)}</p>
-                <p className="text-xs text-amber-600 mt-1">Awaiting payment</p>
+        {/* Earnings Overview — collapsible on mobile */}
+        <section>
+          <button
+            onClick={() => setShowEarnings(!showEarnings)}
+            className="md:hidden w-full flex items-center justify-between glass-morphism rounded-2xl p-4 mb-2"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
+                <DollarSign className="w-4 h-4 text-amber-600" />
               </div>
-              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-amber-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-emerald-400">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Total Earned</p>
-                <p className="text-2xl font-bold text-emerald-900 mt-1">{formatMoney(payoutTotals.totalPaidCents)}</p>
-                <p className="text-xs text-emerald-600 mt-1">Lifetime earnings</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-emerald-600" />
+              <div className="text-left">
+                <span className="font-bold text-slate-900 text-sm">Earnings</span>
+                <span className="block text-xs text-slate-500">Pending {formatMoney(payoutTotals.totalPendingCents)}</span>
               </div>
             </div>
-          </div>
+            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${showEarnings ? 'rotate-180' : ''}`} />
+          </button>
 
-          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-blue-400">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Next Payout</p>
-                <p className="text-2xl font-bold text-blue-900 mt-1">
-                  {payoutTotals.lastPayoutAt ? formatRelativeTime(payoutTotals.lastPayoutAt) : "—"}
-                </p>
-                <p className="text-xs text-blue-600 mt-1">Last payment received</p>
+          <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${showEarnings ? '' : 'hidden md:grid'}`}>
+            <div className="glass-morphism rounded-2xl p-5 border-l-4 border-amber-400">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending Payout</p>
+                  <p className="text-2xl font-bold text-amber-900 mt-1">{formatMoney(payoutTotals.totalPendingCents)}</p>
+                  <p className="text-xs text-amber-600 mt-1">Awaiting payment</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-amber-600" />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-blue-600" />
+            </div>
+
+            <div className="glass-morphism rounded-2xl p-5 border-l-4 border-emerald-400">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Total Earned</p>
+                  <p className="text-2xl font-bold text-emerald-900 mt-1">{formatMoney(payoutTotals.totalPaidCents)}</p>
+                  <p className="text-xs text-emerald-600 mt-1">Lifetime earnings</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-emerald-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-morphism rounded-2xl p-5 border-l-4 border-blue-400">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Next Payout</p>
+                  <p className="text-2xl font-bold text-blue-900 mt-1">
+                    {payoutTotals.lastPayoutAt ? formatRelativeTime(payoutTotals.lastPayoutAt) : "—"}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">Last payment received</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
             </div>
           </div>
@@ -790,41 +812,43 @@ export default function SellerDashboardPage() {
                         {/* Product Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-slate-900 truncate">{product.name}</h4>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
+                            <h4 className="font-bold text-slate-900 truncate text-sm sm:text-base">{product.name}</h4>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
                               <StatusIcon className="w-3 h-3" />
-                              {product.status}
+                              <span className="hidden sm:inline">{product.status}</span>
                             </span>
                           </div>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                            <span>Created {formatRelativeTime(product.created_at)}</span>
+                          <div className="flex items-center gap-2 sm:gap-4 mt-0.5 sm:mt-1 text-xs sm:text-sm text-slate-500">
+                            <span>{formatRelativeTime(product.created_at)}</span>
+                            {/* Show price inline on mobile */}
+                            <span className="sm:hidden font-semibold text-slate-900">{formatMoney(product.final_price_cents)}</span>
                             {product.category && (
                               <>
-                                <span>•</span>
-                                <span>{product.category}</span>
+                                <span className="hidden sm:inline">•</span>
+                                <span className="hidden sm:inline">{product.category}</span>
                               </>
                             )}
                           </div>
                         </div>
 
-                        {/* Pricing */}
+                        {/* Pricing — desktop only */}
                         <div className="text-right hidden sm:block">
                           <p className="font-bold text-slate-900">{formatMoney(product.final_price_cents)}</p>
                           <p className="text-xs text-slate-500">Your price: {formatMoney(product.seller_price_cents)}</p>
                         </div>
 
                         {/* Action */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/seller/products/${product.id}`);
                             }}
-                            className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                            className="hidden sm:block p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                           >
                             <MoreHorizontal className="w-5 h-5" />
                           </button>
-                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-lime-500 transition-colors" />
+                          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 group-hover:text-lime-500 transition-colors" />
                         </div>
                       </div>
                     );
@@ -836,13 +860,26 @@ export default function SellerDashboardPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
-            {/* Recent Activity */}
-            <div className="glass-card rounded-2xl p-5">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+            {/* Recent Activity — collapsible on mobile */}
+            <div className="glass-card rounded-2xl p-4 sm:p-5">
+              <button
+                onClick={() => setShowActivity(!showActivity)}
+                className="md:hidden w-full flex items-center justify-between"
+              >
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  Recent Activity
+                  {activities.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold">{activities.length}</span>
+                  )}
+                </h3>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showActivity ? 'rotate-180' : ''}`} />
+              </button>
+              <h3 className="hidden md:flex font-bold text-slate-900 items-center gap-2 mb-4">
                 <Clock className="w-4 h-4 text-blue-600" />
                 Recent Activity
               </h3>
-              <div className="space-y-3">
+              <div className={`space-y-3 ${showActivity ? 'mt-3' : 'hidden md:block'}`}>
                 {activities.length === 0 ? (
                   <p className="text-sm text-slate-500 text-center py-4">No recent activity</p>
                 ) : (
@@ -867,10 +904,20 @@ export default function SellerDashboardPage() {
               </div>
             </div>
 
-            {/* Quick Links */}
-            <div className="glass-card rounded-2xl p-5">
-              <h3 className="font-bold text-slate-900 mb-4">Quick Links</h3>
-              <div className="space-y-2">
+            {/* Quick Links — collapsible on mobile */}
+            <div className="glass-card rounded-2xl p-4 sm:p-5">
+              <button
+                onClick={() => setShowQuickLinks(!showQuickLinks)}
+                className="md:hidden w-full flex items-center justify-between"
+              >
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-slate-400" />
+                  Quick Links
+                </h3>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showQuickLinks ? 'rotate-180' : ''}`} />
+              </button>
+              <h3 className="hidden md:block font-bold text-slate-900 mb-4">Quick Links</h3>
+              <div className={`space-y-2 ${showQuickLinks ? 'mt-3' : 'hidden md:block'}`}>
                 <button
                   onClick={() => router.push("/seller/verification")}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-left transition-colors group"
@@ -904,9 +951,24 @@ export default function SellerDashboardPage() {
               </div>
             </div>
 
-            {/* Recent Sales */}
-            <div className="glass-card rounded-2xl p-5">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+            {/* Recent Sales — collapsible on mobile */}
+            <div className="glass-card rounded-2xl p-4 sm:p-5">
+              <button
+                onClick={() => setShowSales(!showSales)}
+                className="md:hidden w-full flex items-center justify-between"
+              >
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  Recent Sales
+                  {newSaleCount > 0 && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold">
+                      {newSaleCount} new
+                    </span>
+                  )}
+                </h3>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showSales ? 'rotate-180' : ''}`} />
+              </button>
+              <h3 className="hidden md:flex font-bold text-slate-900 items-center gap-2 mb-4">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
                 Recent Sales
                 {newSaleCount > 0 && (
@@ -916,6 +978,7 @@ export default function SellerDashboardPage() {
                 )}
               </h3>
 
+              <div className={`${showSales ? 'mt-3' : 'hidden md:block'}`}>
               {soldItems.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-4">
                   No sales yet — they'll appear here in real time.
@@ -967,6 +1030,7 @@ export default function SellerDashboardPage() {
                   ))}
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
