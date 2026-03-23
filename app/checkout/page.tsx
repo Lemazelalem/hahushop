@@ -1096,90 +1096,98 @@ export default function CheckoutPage() {
             <span className="text-[12px] font-black text-slate-900">Payment</span>
           </div>
 
-          {/* Selected card (always visible) */}
-          <button
-            type="button"
-            onClick={() => setPaymentExpanded((v) => !v)}
-            className="w-full px-3 py-2.5 flex items-center gap-2.5 text-left bg-slate-900 transition-all"
-          >
-            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
-              <SelectedIcon className="w-4 h-4 text-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-black text-white">{selectedOpt.label}</div>
-              <div className="text-[9px] text-white/60">{selectedOpt.description}</div>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[8px] font-black bg-white/15 text-white">{selectedOpt.badge}</span>
-            <ChevronDown className={`w-4 h-4 text-white/60 transition-transform duration-200 ${paymentExpanded ? "rotate-180" : ""}`} />
-          </button>
+          <div className="p-2.5 pb-3">
+            {/* Card stack container */}
+            <div className="relative">
+              {/* Selected card — top pill */}
+              <button
+                type="button"
+                onClick={() => setPaymentExpanded((v) => !v)}
+                className="relative z-10 w-full rounded-2xl bg-slate-900 px-3.5 py-3 flex items-center gap-3 text-left shadow-lg shadow-slate-900/30 active:scale-[0.98] transition-transform"
+              >
+                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <SelectedIcon className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-black text-white leading-tight">{selectedOpt.label}</div>
+                  <div className="text-[9px] text-white/50 mt-0.5">{selectedOpt.description}</div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[8px] font-black bg-lime-400 text-slate-900">{selectedOpt.badge}</span>
+                <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-300 ${paymentExpanded ? "rotate-180" : ""}`} />
+              </button>
 
-          {/* Collapsed stack peek */}
-          {!paymentExpanded && (
-            <div className="relative h-3 mx-3">
-              <div className="absolute inset-x-1 top-0 h-1.5 rounded-b-lg bg-slate-200 border-x border-b border-slate-200" />
-              <div className="absolute inset-x-2.5 top-1 h-1.5 rounded-b-lg bg-slate-100 border-x border-b border-slate-100" />
+              {/* Stacked card edges peeking below (collapsed only) */}
+              {!paymentExpanded && (
+                <>
+                  <div className="relative z-[5] mx-2 -mt-1.5 h-[10px] rounded-b-2xl bg-slate-200 border border-t-0 border-slate-300 shadow-sm" />
+                  <div className="relative z-[4] mx-4 -mt-1 h-[8px] rounded-b-2xl bg-slate-100 border border-t-0 border-slate-200" />
+                  <div className="relative z-[3] mx-6 -mt-0.5 h-[6px] rounded-b-xl bg-slate-50 border border-t-0 border-slate-100" />
+                </>
+              )}
             </div>
-          )}
 
-          {/* Expanded options */}
-          <div
-            className={`transition-all duration-300 ease-in-out overflow-hidden ${
-              paymentExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
-            }`}
-          >
-            <div className="p-2.5 pt-1 space-y-1.5">
-              {sortedOptions.map((opt) => {
-                if (opt.id === paymentMethod) return null;
-                const Icon = opt.Icon;
-                const isLocked = opt.status === "locked";
-                const isComingSoon = opt.status === "coming_soon";
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      if (!isLocked) {
-                        setPaymentMethod(opt.id);
-                        setPaymentExpanded(false);
-                      }
-                    }}
-                    disabled={isLocked}
-                    className={[
-                      "w-full rounded-xl border px-2.5 py-2 text-left transition-all flex items-center gap-2.5",
-                      isLocked ? "border-slate-200 bg-slate-50 opacity-40 cursor-not-allowed" : "",
-                      isComingSoon ? "border-amber-200 bg-amber-50/50" : "",
-                      !isLocked && !isComingSoon ? "border-slate-200 bg-white hover:border-slate-400 active:scale-[0.99]" : "",
-                    ].join(" ")}
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <Icon className="w-3.5 h-3.5 text-slate-600" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-black text-slate-900">{opt.label}</div>
-                      <div className="text-[9px] text-slate-500">{opt.description}</div>
-                    </div>
-                    <div className="shrink-0 flex flex-col items-end gap-0.5">
-                      <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-slate-100 text-slate-600">{opt.badge}</span>
-                      {isComingSoon && <span className="text-[8px] font-bold text-amber-600">Soon</span>}
-                      {isLocked && <span className="text-[8px] font-bold text-slate-400">Locked</span>}
-                    </div>
-                  </button>
-                );
-              })}
+            {/* Expanded options */}
+            <div
+              className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                paymentExpanded ? "max-h-[600px] opacity-100 mt-2" : "max-h-0 opacity-0"
+              }`}
+            >
+              <div className="space-y-2">
+                {sortedOptions.map((opt) => {
+                  if (opt.id === paymentMethod) return null;
+                  const Icon = opt.Icon;
+                  const isLocked = opt.status === "locked";
+                  const isComingSoon = opt.status === "coming_soon";
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        if (!isLocked) {
+                          setPaymentMethod(opt.id);
+                          setPaymentExpanded(false);
+                        }
+                      }}
+                      disabled={isLocked}
+                      className={[
+                        "w-full rounded-2xl border px-3.5 py-2.5 text-left transition-all flex items-center gap-3",
+                        isLocked ? "border-slate-100 bg-slate-50/70 opacity-40 cursor-not-allowed" : "",
+                        isComingSoon ? "border-amber-200 bg-amber-50/60 hover:border-amber-300" : "",
+                        !isLocked && !isComingSoon ? "border-slate-200 bg-white hover:border-slate-400 hover:shadow-md active:scale-[0.98]" : "",
+                      ].join(" ")}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${isComingSoon ? "bg-amber-100" : "bg-slate-100"}`}>
+                        <Icon className={`w-3.5 h-3.5 ${isComingSoon ? "text-amber-700" : "text-slate-600"}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-black text-slate-900 leading-tight">{opt.label}</div>
+                        <div className="text-[9px] text-slate-400 mt-0.5">{opt.description}</div>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-0.5">
+                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${isComingSoon ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                          {opt.badge}
+                        </span>
+                        {isComingSoon && <span className="text-[8px] font-bold text-amber-500">Soon</span>}
+                        {isLocked && <span className="text-[8px] font-bold text-slate-300">Locked</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Info callout */}
+            {paymentMethod === "pay_on_delivery" && (
+              <div className="mt-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[10px] text-emerald-800">
+                Pay cash or card when the courier arrives.
+              </div>
+            )}
+            {(paymentMethod === "ceb_link" || paymentMethod === "telebirr") && (
+              <div className="mt-2 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[10px] text-amber-800">
+                Coming soon — please use Pay on Delivery.
+              </div>
+            )}
           </div>
-
-          {/* Info callout */}
-          {paymentMethod === "pay_on_delivery" && (
-            <div className="mx-2.5 mb-2.5 rounded-xl bg-emerald-50 border border-emerald-200 px-2.5 py-2 text-[10px] text-emerald-800">
-              Pay cash or card when the courier arrives.
-            </div>
-          )}
-          {(paymentMethod === "ceb_link" || paymentMethod === "telebirr") && (
-            <div className="mx-2.5 mb-2.5 rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-2 text-[10px] text-amber-800">
-              Coming soon — please use Pay on Delivery.
-            </div>
-          )}
         </section>
       );
     })()}
