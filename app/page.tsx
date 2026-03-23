@@ -1175,8 +1175,52 @@ function MGridSkeleton() {
   );
 }
 
+const PROMO_ANIM_STYLES = `
+@keyframes promoSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes promoSlideLeft {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes promoZoomPop {
+  0%   { opacity: 0; transform: scale(0.7); }
+  70%  { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes promoBlurIn {
+  from { opacity: 0; filter: blur(8px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+@keyframes promoFlip {
+  0%   { opacity: 0; transform: rotateX(90deg); }
+  60%  { opacity: 1; transform: rotateX(-10deg); }
+  100% { opacity: 1; transform: rotateX(0deg); }
+}
+@keyframes promoTypewriter {
+  from { opacity: 0; clip-path: inset(0 100% 0 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@keyframes promoPulseGlow {
+  0%, 100% { box-shadow: 0 0 0px rgba(255,255,255,0); }
+  50%      { box-shadow: 0 0 14px rgba(255,255,255,0.25); }
+}
+`;
+
+const PROMO_BANNERS = [
+  { emoji: "🎁", text: "First-order bonus expires in:", gradient: "linear-gradient(90deg, #FF0255, #ff6b6b)", anim: "promoSlideUp 0.5s ease-out" },
+  { emoji: "🚚", text: "Free delivery on orders above ETB 4500", gradient: "linear-gradient(90deg, #0891B2, #38BDF8)", anim: "promoSlideLeft 0.5s ease-out" },
+  { emoji: "🔥", text: "Flash sale, 15% off glassware", gradient: "linear-gradient(90deg, #EA580C, #FACC15)", anim: "promoZoomPop 0.5s ease-out" },
+  { emoji: "⭐", text: "Double loyalty points today", gradient: "linear-gradient(90deg, #7C3AED, #C084FC)", anim: "promoBlurIn 0.5s ease-out" },
+  { emoji: "💎", text: "Buy 2 get 1 free on selected items", gradient: "linear-gradient(90deg, #059669, #34D399)", anim: "promoFlip 0.6s ease-out" },
+  { emoji: "🏷️", text: "New here? 10% off first order", gradient: "linear-gradient(90deg, #D926AA, #F472B6)", anim: "promoTypewriter 0.6s ease-out" },
+];
+
 function FirstOrderBonusBanner({ compact = false }: { compact?: boolean }) {
   const [remainingSeconds, setRemainingSeconds] = useState(24 * 60 * 60 - 1);
+  const [promoIdx, setPromoIdx] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -1192,45 +1236,63 @@ function FirstOrderBonusBanner({ compact = false }: { compact?: boolean }) {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      setPromoIdx((i) => (i + 1) % PROMO_BANNERS.length);
+      setAnimKey((k) => k + 1);
+    }, 5000);
+    return () => clearInterval(cycle);
+  }, []);
+
   const hh = String(Math.floor(remainingSeconds / 3600)).padStart(2, "0");
   const mm = String(Math.floor((remainingSeconds % 3600) / 60)).padStart(2, "0");
   const ss = String(remainingSeconds % 60).padStart(2, "0");
+  const promo = PROMO_BANNERS[promoIdx];
 
   return (
-    <div
-      style={{
-        background: "linear-gradient(90deg, #FF0255, #ff6b6b)",
-        padding: compact ? "10px 12px" : "12px 16px",
-        borderRadius: 12,
-        marginTop: 16,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-      }}
-    >
-      <span
+    <>
+      <style>{PROMO_ANIM_STYLES}</style>
+      <div
         style={{
-          color: "#fff",
-          fontSize: compact ? 11 : 12,
-          fontWeight: 700,
-          lineHeight: 1.25,
+          background: promo.gradient,
+          padding: compact ? "10px 12px" : "12px 16px",
+          borderRadius: 12,
+          marginTop: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          transition: "background 0.5s ease",
+          animation: "promoPulseGlow 2.5s ease-in-out infinite",
+          overflow: "hidden",
         }}
       >
-        🎁 First-order bonus expires in:
-      </span>
-      <span
-        style={{
-          color: "#fff",
-          fontSize: compact ? 13 : 14,
-          fontWeight: 900,
-          fontFamily: "monospace",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {hh}:{mm}:{ss}
-      </span>
-    </div>
+        <span
+          key={animKey}
+          style={{
+            color: "#fff",
+            fontSize: compact ? 11 : 12,
+            fontWeight: 700,
+            lineHeight: 1.25,
+            animation: promo.anim,
+            animationFillMode: "both",
+          }}
+        >
+          {promo.emoji} {promo.text}
+        </span>
+        <span
+          style={{
+            color: "#fff",
+            fontSize: compact ? 13 : 14,
+            fontWeight: 900,
+            fontFamily: "monospace",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {hh}:{mm}:{ss}
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -1441,6 +1503,8 @@ function ValueProp({
 
 function WelcomeCountdown() {
   const [remaining, setRemaining] = useState(0);
+  const [promoIdx, setPromoIdx] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
 
   useEffect(() => {
     const tick = () => {
@@ -1454,25 +1518,40 @@ function WelcomeCountdown() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      setPromoIdx((i) => (i + 1) % PROMO_BANNERS.length);
+      setAnimKey((k) => k + 1);
+    }, 4000);
+    return () => clearInterval(cycle);
+  }, []);
+
   const hh = String(Math.floor(remaining / 3600)).padStart(2, "0");
   const mm = String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
+  const promo = PROMO_BANNERS[promoIdx];
 
   return (
-    <p
-      style={{
-        margin: "6px 0 0",
-        textAlign: "center",
-        fontSize: 12,
-        fontWeight: 600,
-        color: "rgba(255,255,255,0.62)",
-      }}
-    >
-      First-order bonus ends in{" "}
-      <span style={{ fontFamily: "monospace", fontWeight: 900, color: "#86EFAC" }}>
-        {hh}:{mm}:{ss}
-      </span>
-    </p>
+    <>
+      <style>{PROMO_ANIM_STYLES}</style>
+      <p
+        key={animKey}
+        style={{
+          margin: "6px 0 0",
+          textAlign: "center",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "rgba(255,255,255,0.62)",
+          animation: promo.anim,
+          animationFillMode: "both",
+        }}
+      >
+        {promo.emoji} {promo.text}{" "}
+        <span style={{ fontFamily: "monospace", fontWeight: 900, color: "#86EFAC" }}>
+          {hh}:{mm}:{ss}
+        </span>
+      </p>
+    </>
   );
 }
 
