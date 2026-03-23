@@ -875,7 +875,7 @@ export default function CheckoutPage() {
       {/* ─ Hide checkout form while order is being processed ─ */}
       {/* ───────────────── MOBILE ───────────────── */}
       {/* ═══════════════════════ MOBILE ═══════════════════════ */}
-<div className="md:hidden min-h-screen bg-[#f5f5f5] pb-24">
+<div className="md:hidden min-h-screen bg-[#f5f5f5] pb-32">
 
   {/* Top bar */}
   <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
@@ -1181,7 +1181,7 @@ export default function CheckoutPage() {
   </div>
 
   {/* Sticky bottom bar */}
-  <div className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-md">
+  <div className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)]">
     <div className="px-3 py-2.5 flex items-center gap-3">
       <div className="min-w-0 flex-1">
         <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
