@@ -805,7 +805,7 @@ function ApplicationCard({
                   ) : (
                     <X className="w-4 h-4" />
                   )}
-                  Reject
+                  {app.status === "approved" ? "Revoke Access" : "Reject"}
                 </button>
               )}
 
