@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------
+  Base / Reset
+------------------------------------------------------------ */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.22);
+  --glass-bg-strong: rgba(255, 255, 255, 0.32);
+  --glass-border: rgba(255, 255, 255, 0.45);
+  --glass-border-soft: rgba(255, 255, 255, 0.28);
+
+  --shadow-soft: 0 20px 60px rgba(0, 20, 60, 0.14);
+  --shadow-card: 0 16px 45px rgba(0, 15, 45, 0.12);
+
+  --blue-glow: rgba(56, 189, 248, 0.35);
+  --green-glow: rgba(163, 230, 53, 0.35);
+
+  --text-dark: #0f172a; /* slate-900 */
+  --text-mid: #334155; /* slate-700 */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: var(--text-dark);
+  background: #eef7ff;
+  overflow-x: hidden;
+}
+
+/* ------------------------------------------------------------
+  Background system (fixed layers)
+------------------------------------------------------------ */
+.bg-scene {
+  position: fixed;
+  inset: 0;
+  z-index: -30;
+  background:
+    radial-gradient(900px 600px at 15% 15%, rgba(56, 189, 248, 0.30), transparent 60%),
+    radial-gradient(900px 600px at 85% 25%, rgba(163, 230, 53, 0.26), transparent 60%),
+    radial-gradient(1000px 700px at 50% 85%, rgba(56, 189, 248, 0.18), transparent 65%),
+    linear-gradient(180deg, rgba(240, 249, 255, 1), rgba(236, 253, 245, 0.85));
+}
+
+.bg-vignette {
+  position: fixed;
+  inset: -40px;
+  z-index: -20;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 55%, rgba(2, 6, 23, 0.14) 100%);
+}
+
+.sparkles {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.9) 1px, transparent 1px),
+    radial-gradient(rgba(255, 255, 255, 0.6) 1px, transparent 1px);
+  background-size: 120px 120px, 180px 180px;
+  background-position: 0 0, 40px 60px;
+  filter: blur(0.2px);
+}
+
+/* ------------------------------------------------------------
+  Glass design system
+------------------------------------------------------------ */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-soft);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-soft);
+}
+
+.glass-card {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-card);
+}
+
+.glass-ring {
+  position: relative;
+}
+.glass-ring::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.08)
+  );
+  opacity: 0.35;
+  mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  padding: 1px;
+}
+
+/* ------------------------------------------------------------
+  Glows
+------------------------------------------------------------ */
+.glow-blue {
+  box-shadow:
+    0 18px 55px rgba(0, 30, 80, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 40px var(--blue-glow);
+}
+
+.glow-green {
+  box-shadow:
+    0 18px 55px rgba(0, 30, 80, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 40px var(--green-glow);
+}
+
+/* ------------------------------------------------------------
+  Pills / Buttons / Hover lift
+------------------------------------------------------------ */
+.pill {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 28px rgba(0, 20, 60, 0.10);
+  transition: transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease;
+}
+
+.btn-cta {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: linear-gradient(90deg, rgba(163, 230, 53, 0.95), rgba(56, 189, 248, 0.75));
+  box-shadow:
+    0 14px 40px rgba(0, 25, 70, 0.16),
+    0 0 30px rgba(163, 230, 53, 0.22);
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.lift:hover {
+  transform: translateY(-3px);
+}
+
+/* Small interactive polish */
+.pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px rgba(0, 20, 60, 0.12);
+}
+
+.btn-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.02);
+  box-shadow:
+    0 18px 48px rgba(0, 25, 70, 0.18),
+    0 0 34px rgba(56, 189, 248, 0.22);
+}

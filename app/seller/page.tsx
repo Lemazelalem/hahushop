@@ -1,0 +1,976 @@
+// app/seller/page.tsx
+"use client";
+
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  Bell,
+  Package,
+  Plus,
+  Home,
+  Wallet,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  XCircle,
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  ChevronRight,
+  Box,
+  FileText,
+  Settings,
+  LogOut,
+  Search,
+  Filter,
+  MoreHorizontal,
+  ArrowUpRight,
+  Store
+} from "lucide-react";
+
+type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
+
+type ProductRow = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  image_url: string | null;
+  status: ProductStatus;
+  created_at: string;
+  seller_price_cents: number | null;
+  final_price_cents: number | null;
+  category?: string;
+};
+
+type SellerDocumentStatus = "pending" | "approved" | "rejected";
+
+type SellerVerificationInfo = {
+  status: SellerDocumentStatus | "none";
+  document_type: string | null;
+  admin_notes: string | null;
+  created_at: string | null;
+  reviewed_at: string | null;
+};
+
+type PayoutRowLite = {
+  status: string | null;
+  calculated_amount_cents: number | null;
+  adjusted_amount_cents: number | null;
+  paid_at?: string | null;
+};
+
+type PayoutTotals = {
+  totalRecordedCents: number;
+  totalPaidCents: number;
+  totalPendingCents: number;
+  lastPayoutAt: string | null;
+};
+
+type ActivityItem = {
+  id: string;
+  type: 'product' | 'payout' | 'verification';
+  message: string;
+  time: string;
+  status?: string;
+};
+
+type SoldItem = {
+  id: string;
+  product_id: string;
+  name_snapshot: string;
+  image_url_snapshot: string | null;
+  emoji_snapshot: string | null;
+  quantity: number;
+  line_total_cents: number | null;
+  order_id: string;
+  order_created_at: string;
+  order_status: string;
+  order_payment_status: string;
+};
+
+export default function SellerDashboardPage() {
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [signedInAs, setSignedInAs] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ProductStatus | "all">("all");
+  
+  const [verification, setVerification] = useState<SellerVerificationInfo>({
+    status: "none",
+    document_type: null,
+    admin_notes: null,
+    created_at: null,
+    reviewed_at: null,
+  });
+
+  const [payoutTotals, setPayoutTotals] = useState<PayoutTotals>({
+    totalRecordedCents: 0,
+    totalPaidCents: 0,
+    totalPendingCents: 0,
+    lastPayoutAt: null,
+  });
+
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
+  const [newSaleCount, setNewSaleCount] = useState(0);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setPageError(null);
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const user = userData?.user;
+
+      if (userError || !user) {
+        setPageError("You must be logged in as a seller.");
+        setLoading(false);
+        return;
+      }
+
+      setSignedInAs(user.id);
+
+      // Check role
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError || !profile || profile.role !== "seller") {
+        setPageError("Not authorized. This area is for sellers only.");
+        setLoading(false);
+        return;
+      }
+
+      // Load products
+      const { data: rows, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProducts((rows || []) as ProductRow[]);
+
+      // Load verification
+      const { data: docs } = await supabase
+        .from("seller_documents")
+        .select("*")
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (docs && docs.length > 0) {
+        const latest = docs[0];
+        setVerification({
+          status: ["pending", "approved", "rejected"].includes(latest.status) 
+            ? latest.status 
+            : "none",
+          document_type: latest.document_type,
+          admin_notes: latest.admin_notes,
+          created_at: latest.created_at,
+          reviewed_at: latest.reviewed_at,
+        });
+      }
+
+      // Load payouts
+      const { data: payoutData } = await supabase
+        .from("seller_payouts")
+        .select("*")
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (payoutData) {
+        let totalRecorded = 0;
+        let totalPaid = 0;
+        let lastPayoutAt: string | null = null;
+
+        payoutData.forEach((row: PayoutRowLite) => {
+          const amount = row.adjusted_amount_cents ?? row.calculated_amount_cents ?? 0;
+          if (amount > 0) {
+            totalRecorded += amount;
+            if (row.status?.toLowerCase() === "paid") {
+              totalPaid += amount;
+              if (row.paid_at && (!lastPayoutAt || row.paid_at > lastPayoutAt)) {
+                lastPayoutAt = row.paid_at;
+              }
+            }
+          }
+        });
+
+        setPayoutTotals({
+          totalRecordedCents: totalRecorded,
+          totalPaidCents: totalPaid,
+          totalPendingCents: Math.max(totalRecorded - totalPaid, 0),
+          lastPayoutAt,
+        });
+
+        // Load sold items
+        const { data: salesData } = await supabase
+          .from("order_items")
+          .select(`
+            id, product_id, name_snapshot, image_url_snapshot, emoji_snapshot,
+            quantity, line_total_cents, order_id,
+            orders(created_at, status, payment_status)
+          `)
+          .eq("seller_id", user.id)
+          .order("order_id", { ascending: false })
+          .limit(30);
+
+        if (salesData) {
+          const mapped: SoldItem[] = (salesData as any[])
+            .filter((item) => item.orders?.status !== "cancelled")
+            .map((item) => ({
+              id: item.id,
+              product_id: item.product_id,
+              name_snapshot: item.name_snapshot,
+              image_url_snapshot: item.image_url_snapshot,
+              emoji_snapshot: item.emoji_snapshot,
+              quantity: item.quantity,
+              line_total_cents: item.line_total_cents,
+              order_id: item.order_id,
+              order_created_at: item.orders?.created_at ?? new Date().toISOString(),
+              order_status: item.orders?.status ?? "unknown",
+              order_payment_status: item.orders?.payment_status ?? "unknown",
+            }))
+            .slice(0, 20);
+
+          setSoldItems(mapped);
+        }
+
+        // Generate activities
+        const recentActivities: ActivityItem[] = [];
+        
+        // Add product activities
+        (rows || []).slice(0, 3).forEach((p: ProductRow) => {
+          recentActivities.push({
+            id: p.id,
+            type: 'product',
+            message: `Product "${p.name}" ${p.status}`,
+            time: p.created_at,
+            status: p.status,
+          });
+        });
+
+        // Add payout activities
+        payoutData.slice(0, 2).forEach((p: PayoutRowLite, idx: number) => {
+          const amount = p.adjusted_amount_cents ?? p.calculated_amount_cents ?? 0;
+          recentActivities.push({
+            id: `payout-${idx}`,
+            type: 'payout',
+            message: p.status === 'paid' ? 'Payout received' : 'Payout pending',
+            time: p.paid_at || new Date().toISOString(),
+          });
+        });
+
+        setActivities(recentActivities.slice(0, 5));
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setPageError(err.message || "Failed to load dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!signedInAs) return;
+
+    const channel = supabase
+      .channel(`seller-sales-${signedInAs}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "order_items",
+          filter: `seller_id=eq.${signedInAs}`,
+        },
+        (payload) => {
+          const item = payload.new as any;
+          const newSale: SoldItem = {
+            id: item.id,
+            product_id: item.product_id,
+            name_snapshot: item.name_snapshot,
+            image_url_snapshot: item.image_url_snapshot,
+            emoji_snapshot: item.emoji_snapshot,
+            quantity: item.quantity,
+            line_total_cents: item.line_total_cents,
+            order_id: item.order_id,
+            order_created_at: new Date().toISOString(),
+            order_status: "pending",
+            order_payment_status: "unpaid",
+          };
+          setSoldItems((prev) => [newSale, ...prev].slice(0, 20));
+          setNewSaleCount((prev) => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [signedInAs]);
+
+  const stats = useMemo(() => {
+    const base = { total: 0, draft: 0, submitted: 0, approved: 0, rejected: 0, archived: 0 };
+    products.forEach(p => {
+      base.total++;
+      base[p.status]++;
+    });
+    return base;
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [products, searchQuery, statusFilter]);
+
+  const formatMoney = (cents: number | null | undefined) => {
+    if (!cents && cents !== 0) return "—";
+    return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return "";
+    return new Date(iso).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
+
+  const formatRelativeTime = (date: string) => {
+    const d = new Date(date);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 7) return `${days} days ago`;
+    return formatDate(date);
+  };
+
+  const getStatusConfig = (status: string) => {
+    const configs: Record<string, { icon: any; color: string; bg: string; border: string }> = {
+      approved: { 
+        icon: CheckCircle2, 
+        color: "text-emerald-700", 
+        bg: "bg-emerald-50/80", 
+        border: "border-emerald-200/80" 
+      },
+      submitted: { 
+        icon: Clock, 
+        color: "text-sky-700", 
+        bg: "bg-sky-50/80", 
+        border: "border-sky-200/80" 
+      },
+      rejected: { 
+        icon: XCircle, 
+        color: "text-rose-700", 
+        bg: "bg-rose-50/80", 
+        border: "border-rose-200/80" 
+      },
+      draft: { 
+        icon: Box, 
+        color: "text-slate-700", 
+        bg: "bg-slate-50/80", 
+        border: "border-slate-200/80" 
+      },
+      archived: { 
+        icon: Package, 
+        color: "text-amber-700", 
+        bg: "bg-amber-50/80", 
+        border: "border-amber-200/80" 
+      },
+    };
+    return configs[status] || configs.draft;
+  };
+
+  const renderVerificationCard = () => {
+    const v = verification;
+    
+    if (v.status === "none") {
+      return (
+        <div className="glass-morphism rounded-2xl p-5 border-l-4 border-amber-400 bg-gradient-to-r from-amber-50/80 to-white/60">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900">Complete Your Verification</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Upload your business documents to unlock full seller features and start selling.
+              </p>
+              <button
+                onClick={() => router.push("/seller/verification")}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors shadow-md"
+              >
+                Start Verification
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (v.status === "pending") {
+      return (
+        <div className="glass-morphism rounded-2xl p-5 border-l-4 border-sky-400 bg-gradient-to-r from-sky-50/80 to-white/60">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-6 h-6 text-sky-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900">Verification In Review</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Your documents are being reviewed. You can still create products while waiting.
+              </p>
+              {v.created_at && (
+                <p className="text-xs text-sky-600 mt-2">
+                  Submitted {formatRelativeTime(v.created_at)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (v.status === "rejected") {
+      return (
+        <div className="glass-morphism rounded-2xl p-5 border-l-4 border-rose-400 bg-gradient-to-r from-rose-50/80 to-white/60">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+              <XCircle className="w-6 h-6 text-rose-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900">Verification Rejected</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Please review admin feedback and resubmit corrected documents.
+              </p>
+              {v.admin_notes && (
+                <div className="mt-3 p-3 rounded-lg bg-white/80 border border-rose-200 text-sm text-rose-800">
+                  <span className="font-semibold">Feedback: </span>
+                  {v.admin_notes}
+                </div>
+              )}
+              <button
+                onClick={() => router.push("/seller/verification")}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500 text-white text-sm font-semibold hover:bg-rose-600 transition-colors shadow-md"
+              >
+                Resubmit Documents
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="glass-morphism rounded-2xl p-5 border-l-4 border-emerald-400 bg-gradient-to-r from-emerald-50/80 to-white/60">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-slate-900">Verified Seller ✅</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              Your account is verified. Your products can now be approved for the public shop.
+            </p>
+            {v.reviewed_at && (
+              <p className="text-xs text-emerald-600 mt-2">
+                Verified on {formatDate(v.reviewed_at)}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-lime-50/30 to-blue-50/30 p-4 md:p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="h-32 bg-slate-200/50 rounded-3xl" />
+            <div className="grid grid-cols-4 gap-4">
+              {[1,2,3,4].map(i => <div key={i} className="h-24 bg-slate-200/50 rounded-2xl" />)}
+            </div>
+            <div className="h-96 bg-slate-200/50 rounded-3xl" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (pageError) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-lime-50/30 to-blue-50/30 p-4 md:p-6 flex items-center justify-center">
+        <div className="glass-card rounded-3xl p-8 text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-rose-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Access Error</h2>
+          <p className="text-slate-600 mb-6">{pageError}</p>
+          <button
+            onClick={() => router.push("/login")}
+            className="px-6 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors"
+          >
+            Go to Login
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-lime-50/30 to-blue-50/30">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-40 glass-morphism border-b border-slate-200/40 px-4 md:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-lime-400 to-blue-500 flex items-center justify-center">
+              <Store className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="font-bold text-slate-900">Seller Dashboard</h1>
+              <p className="text-xs text-slate-500">Manage your store</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push("/")}
+              className="p-2 rounded-lg hover:bg-slate-100/80 transition-colors"
+              title="Home"
+            >
+              <Home className="w-5 h-5 text-slate-600" />
+            </button>
+            <button
+              onClick={() => setNewSaleCount(0)}
+              className="relative p-2 rounded-lg hover:bg-slate-100/80 transition-colors"
+              title="Recent sales"
+            >
+              <Bell className="w-5 h-5 text-slate-600" />
+              {newSaleCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {newSaleCount > 9 ? "9+" : newSaleCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => router.push("/seller/payouts")}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-slate-100/80 text-slate-700 font-medium transition-colors"
+            >
+              <Wallet className="w-4 h-4" />
+              Payouts
+            </button>
+            <button
+              onClick={() => router.push("/seller/products/new")}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 transition-colors shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Product</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+        {/* Welcome + Verification */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
+                Welcome back! 👋
+              </h2>
+              <p className="text-slate-600 mt-1">
+                Here's what's happening with your store today.
+              </p>
+            </div>
+            {renderVerificationCard()}
+          </div>
+
+          {/* Quick Stats */}
+          <div className="glass-morphism rounded-2xl p-5 space-y-4">
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-lime-600" />
+              Performance
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white/60">
+                <span className="text-sm text-slate-600">Total Products</span>
+                <span className="text-xl font-bold text-slate-900">{stats.total}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60">
+                <span className="text-sm text-emerald-700">Approved</span>
+                <span className="text-xl font-bold text-emerald-700">{stats.approved}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-sky-50/60">
+                <span className="text-sm text-sky-700">Pending Review</span>
+                <span className="text-xl font-bold text-sky-700">{stats.submitted}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Earnings Overview */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-amber-400">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending Payout</p>
+                <p className="text-2xl font-bold text-amber-900 mt-1">{formatMoney(payoutTotals.totalPendingCents)}</p>
+                <p className="text-xs text-amber-600 mt-1">Awaiting payment</p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-amber-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-emerald-400">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Total Earned</p>
+                <p className="text-2xl font-bold text-emerald-900 mt-1">{formatMoney(payoutTotals.totalPaidCents)}</p>
+                <p className="text-xs text-emerald-600 mt-1">Lifetime earnings</p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-morphism rounded-2xl p-5 border-l-4 border-blue-400">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Next Payout</p>
+                <p className="text-2xl font-bold text-blue-900 mt-1">
+                  {payoutTotals.lastPayoutAt ? formatRelativeTime(payoutTotals.lastPayoutAt) : "—"}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">Last payment received</p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                <Calendar className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Products Section */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="glass-card rounded-2xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-lime-600" />
+                    My Products
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Manage and track your product listings
+                  </p>
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search products..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/50 w-48"
+                    />
+                  </div>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/50"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status Tabs */}
+              <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+                {[
+                  { key: 'all', label: 'All', count: stats.total, color: 'bg-slate-100 text-slate-700' },
+                  { key: 'approved', label: 'Approved', count: stats.approved, color: 'bg-emerald-100 text-emerald-700' },
+                  { key: 'submitted', label: 'Pending', count: stats.submitted, color: 'bg-sky-100 text-sky-700' },
+                  { key: 'draft', label: 'Drafts', count: stats.draft, color: 'bg-slate-100 text-slate-700' },
+                  { key: 'rejected', label: 'Rejected', count: stats.rejected, color: 'bg-rose-100 text-rose-700' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setStatusFilter(tab.key as any)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                      statusFilter === tab.key 
+                        ? 'bg-slate-900 text-white shadow-md' 
+                        : tab.color + ' hover:bg-opacity-80'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      statusFilter === tab.key ? 'bg-white/20' : 'bg-white/50'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-12 rounded-2xl bg-slate-50/50 border border-dashed border-slate-200">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                    <Package className="w-8 h-8 text-slate-400" />
+                  </div>
+                  <h4 className="font-bold text-slate-900 mb-1">No products found</h4>
+                  <p className="text-sm text-slate-500 mb-4">
+                    {searchQuery || statusFilter !== 'all' 
+                      ? "Try adjusting your filters" 
+                      : "Start by adding your first product"}
+                  </p>
+                  <button
+                    onClick={() => router.push("/seller/products/new")}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Product
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredProducts.map((product) => {
+                    const statusConfig = getStatusConfig(product.status);
+                    const StatusIcon = statusConfig.icon;
+                    
+                    return (
+                      <div
+                        key={product.id}
+                        className="group flex items-center gap-4 p-4 rounded-xl bg-white/60 hover:bg-white/80 border border-slate-200/40 hover:border-lime-300/50 transition-all cursor-pointer"
+                        onClick={() => router.push(`/seller/products/${product.id}`)}
+                      >
+                        {/* Product Image */}
+                        <div className="w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
+                          {product.image_url ? (
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-2xl">
+                              {product.emoji || "📦"}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Product Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-slate-900 truncate">{product.name}</h4>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
+                              <StatusIcon className="w-3 h-3" />
+                              {product.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
+                            <span>Created {formatRelativeTime(product.created_at)}</span>
+                            {product.category && (
+                              <>
+                                <span>•</span>
+                                <span>{product.category}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Pricing */}
+                        <div className="text-right hidden sm:block">
+                          <p className="font-bold text-slate-900">{formatMoney(product.final_price_cents)}</p>
+                          <p className="text-xs text-slate-500">Your price: {formatMoney(product.seller_price_cents)}</p>
+                        </div>
+
+                        {/* Action */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/seller/products/${product.id}`);
+                            }}
+                            className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                          >
+                            <MoreHorizontal className="w-5 h-5" />
+                          </button>
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-lime-500 transition-colors" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Recent Activity */}
+            <div className="glass-card rounded-2xl p-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <Clock className="w-4 h-4 text-blue-600" />
+                Recent Activity
+              </h3>
+              <div className="space-y-3">
+                {activities.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-4">No recent activity</p>
+                ) : (
+                  activities.map((activity, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50/50">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        activity.type === 'product' ? 'bg-lime-100 text-lime-600' :
+                        activity.type === 'payout' ? 'bg-emerald-100 text-emerald-600' :
+                        'bg-blue-100 text-blue-600'
+                      }`}>
+                        {activity.type === 'product' ? <Package className="w-4 h-4" /> :
+                         activity.type === 'payout' ? <DollarSign className="w-4 h-4" /> :
+                         <CheckCircle2 className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{activity.message}</p>
+                        <p className="text-xs text-slate-500">{formatRelativeTime(activity.time)}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Quick Links */}
+            <div className="glass-card rounded-2xl p-5">
+              <h3 className="font-bold text-slate-900 mb-4">Quick Links</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => router.push("/seller/verification")}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-left transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-700">Verification</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-lime-500" />
+                </button>
+                <button
+                  onClick={() => router.push("/seller/payouts")}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-left transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Wallet className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-700">Payout History</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-lime-500" />
+                </button>
+                <button
+                  onClick={() => router.push("/seller/settings")}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-left transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-700">Settings</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-lime-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Sales */}
+            <div className="glass-card rounded-2xl p-5">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+                Recent Sales
+                {newSaleCount > 0 && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-xs font-bold">
+                    {newSaleCount} new
+                  </span>
+                )}
+              </h3>
+
+              {soldItems.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">
+                  No sales yet — they'll appear here in real time.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {soldItems.slice(0, 5).map((sale) => (
+                    <div
+                      key={sale.id}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {sale.image_url_snapshot ? (
+                          <img
+                            src={sale.image_url_snapshot}
+                            alt={sale.name_snapshot}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-lg">{sale.emoji_snapshot ?? "📦"}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {sale.name_snapshot}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Qty {sale.quantity} ·{" "}
+                          {sale.line_total_cents
+                            ? `ETB ${(sale.line_total_cents / 100).toFixed(0)}`
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            sale.order_payment_status === "paid"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {sale.order_payment_status === "paid" ? "Paid" : "Pending"}
+                        </span>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {formatRelativeTime(sale.order_created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
