@@ -62,6 +62,12 @@ export default function AdminDashboard() {
   const [businessPending, setBusinessPending] = useState(0);
   const [activePromotions, setActivePromotions] = useState(0);
 
+  // Notification counts
+  const [pendingOrders, setPendingOrders] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [pendingSellers, setPendingSellers] = useState(0);
+  const [pendingReturns, setPendingReturns] = useState(0);
+
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
@@ -162,6 +168,42 @@ export default function AdminDashboard() {
 
       if (!promoErr && promoCount !== null) {
         setActivePromotions(promoCount);
+      }
+
+      // Pending orders count (pending + processing)
+      const { count: ordPending, error: ordErr } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending", "processing"]);
+
+      if (!ordErr && ordPending !== null) {
+        setPendingOrders(ordPending);
+      }
+
+      // Pending product approvals (submitted status)
+      setPendingApprovals(
+        (data ?? []).filter((p: { status: ProductStatus }) => p.status === "submitted").length
+      );
+
+      // Pending seller verifications
+      const { count: sellerPending, error: sellerErr } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "seller")
+        .eq("seller_verified", false);
+
+      if (!sellerErr && sellerPending !== null) {
+        setPendingSellers(sellerPending);
+      }
+
+      // Pending returns
+      const { count: retCount, error: retErr } = await supabase
+        .from("returns")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+
+      if (!retErr && retCount !== null) {
+        setPendingReturns(retCount);
       }
     }
 
@@ -367,9 +409,21 @@ export default function AdminDashboard() {
         <div className="mt-6 flex flex-wrap gap-3">
           <button
             onClick={() => router.push("/admin/approvals")}
-            className="pill px-5 py-3 text-sm font-semibold"
+            className="pill px-5 py-3 text-sm font-semibold relative flex items-center gap-2"
           >
             Product Approvals
+            {pendingApprovals > 0 && (
+              <span
+                className="inline-flex items-center justify-center text-xs font-black rounded-full px-2 py-0.5 min-w-[22px]"
+                style={{
+                  background: "linear-gradient(90deg,#f59e0b,#f97316)",
+                  color: "#fff",
+                  fontSize: 10,
+                }}
+              >
+                {pendingApprovals}
+              </span>
+            )}
           </button>
 
           <button
@@ -381,16 +435,40 @@ export default function AdminDashboard() {
 
           <button
             onClick={() => router.push("/admin/orders")}
-            className="pill px-5 py-3 text-sm font-semibold"
+            className="pill px-5 py-3 text-sm font-semibold relative flex items-center gap-2"
           >
             Orders &amp; Checkout
+            {pendingOrders > 0 && (
+              <span
+                className="inline-flex items-center justify-center text-xs font-black rounded-full px-2 py-0.5 min-w-[22px] animate-pulse"
+                style={{
+                  background: "linear-gradient(90deg,#ef4444,#ec4899)",
+                  color: "#fff",
+                  fontSize: 10,
+                }}
+              >
+                {pendingOrders}
+              </span>
+            )}
           </button>
 
           <button
             onClick={() => router.push("/admin/sellers")}
-            className="pill px-5 py-3 text-sm font-semibold"
+            className="pill px-5 py-3 text-sm font-semibold relative flex items-center gap-2"
           >
             Seller Verification
+            {pendingSellers > 0 && (
+              <span
+                className="inline-flex items-center justify-center text-xs font-black rounded-full px-2 py-0.5 min-w-[22px]"
+                style={{
+                  background: "linear-gradient(90deg,#8b5cf6,#6366f1)",
+                  color: "#fff",
+                  fontSize: 10,
+                }}
+              >
+                {pendingSellers}
+              </span>
+            )}
           </button>
 
           <button
@@ -427,6 +505,18 @@ export default function AdminDashboard() {
             className="pill px-5 py-3 text-sm font-semibold relative flex items-center gap-2 bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors"
           >
             📦 Returns
+            {pendingReturns > 0 && (
+              <span
+                className="inline-flex items-center justify-center text-xs font-black rounded-full px-2 py-0.5 min-w-[22px]"
+                style={{
+                  background: "linear-gradient(90deg,#0ea5e9,#06b6d4)",
+                  color: "#fff",
+                  fontSize: 10,
+                }}
+              >
+                {pendingReturns}
+              </span>
+            )}
           </button>
 
           {/* Promotions — with active badge */}
