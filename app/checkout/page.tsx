@@ -1030,37 +1030,37 @@ export default function CheckoutPage() {
           {/* Full Name */}
           <div className="col-span-2">
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><User className="w-3 h-3" />Full Name<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingFullName} onChange={(e) => setShippingFullName(e.target.value)} placeholder="Abebe Kebede" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingFullName} onChange={(e) => setShippingFullName(e.target.value)} placeholder="Abebe Kebede" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* Phone */}
           <div className="col-span-2">
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Phone className="w-3 h-3" />Phone<span className="text-rose-500">*</span></label>
-            <input type="tel" value={shippingPhone} onChange={(e) => setShippingPhone(e.target.value)} placeholder="0911 234 567" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="tel" value={shippingPhone} onChange={(e) => setShippingPhone(e.target.value)} placeholder="0911 234 567" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* Region */}
           <div>
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Building2 className="w-3 h-3" />Region<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingRegion} onChange={(e) => setShippingRegion(e.target.value)} placeholder="Addis Ababa" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingRegion} onChange={(e) => setShippingRegion(e.target.value)} placeholder="Addis Ababa" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* City */}
           <div>
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Home className="w-3 h-3" />City<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingCity} onChange={(e) => setShippingCity(e.target.value)} placeholder="Kirkos" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingCity} onChange={(e) => setShippingCity(e.target.value)} placeholder="Kirkos" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* Woreda */}
           <div>
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Woreda</label>
-            <input type="text" value={shippingWoreda} onChange={(e) => setShippingWoreda(e.target.value)} placeholder="Woreda 08" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingWoreda} onChange={(e) => setShippingWoreda(e.target.value)} placeholder="Woreda 08" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* Kebele */}
           <div>
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Kebele</label>
-            <input type="text" value={shippingKebele} onChange={(e) => setShippingKebele(e.target.value)} placeholder="Kebele 15" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingKebele} onChange={(e) => setShippingKebele(e.target.value)} placeholder="Kebele 15" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
           {/* Street */}
           <div className="col-span-2">
             <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Navigation className="w-3 h-3" />Street / Landmark</label>
-            <input type="text" value={shippingStreet} onChange={(e) => setShippingStreet(e.target.value)} placeholder="Near Edna Mall" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            <input type="text" value={shippingStreet} onChange={(e) => setShippingStreet(e.target.value)} placeholder="Near Edna Mall" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
           </div>
         </div>
         {/* Instructions */}
@@ -1071,7 +1071,7 @@ export default function CheckoutPage() {
             onChange={(e) => { const words = e.target.value.trim().split(/\s+/).filter(Boolean); if (words.length <= 100) setShippingDetails(e.target.value); }}
             rows={2}
             placeholder="Call when arriving…"
-            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-2 text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900 resize-none"
+            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900 resize-none"
           />
           <div className="text-right text-[9px] text-slate-400">
             {shippingDetails.trim().split(/\s+/).filter(Boolean).length}/100
