@@ -533,7 +533,7 @@ export default function ProductDetailsPage() {
         )}
 
         {/* Mobile content */}
-        <div className="px-4 pt-3 pb-32">
+        <div className="px-4 pt-3 pb-40">
 
           {/* ── Price row ── */}
           <div className="flex items-baseline gap-2 flex-wrap mb-1">
@@ -752,27 +752,42 @@ export default function ProductDetailsPage() {
         </div>
 
         {/* ── Mobile sticky bottom bar ── */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-5 pt-3 bg-white"
-          style={{ borderTop: `1px solid ${BORDER}` }}>
-          <VariantPill color={selColor} size={selSize} />
-          <div className="flex gap-2.5">
-            <button onClick={handleAddToCart} disabled={addedToCart || cantAdd}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-full text-sm font-bold transition-all active:scale-[0.98]"
-              style={{
-                fontFamily: F,
-                background: addedToCart ? BLACK : cantAdd ? BG : "#f1f5f9",
-                color: addedToCart ? "#fff" : cantAdd ? MUTED : BLACK,
-                border: `1.5px solid ${cantAdd && !addedToCart ? BORDER : "transparent"}`,
-                cursor: cantAdd ? "not-allowed" : "pointer",
-              }}>
-              {addedToCart ? <><Check className="w-4 h-4" /> Added!</> : <><ShoppingCart className="w-4 h-4" /> {addLabel()}</>}
-            </button>
-            <button onClick={(e) => { if (handleAddToCart(e)) router.push("/checkout"); }}
-              disabled={cantAdd}
-              className="flex-1 flex items-center justify-center py-3 rounded-full text-sm font-black transition-all active:scale-[0.98]"
-              style={{ fontFamily: F, background: cantAdd ? "#fca5a5" : ACCENT, color: "#fff", border: "none", cursor: cantAdd ? "not-allowed" : "pointer" }}>
-              Buy Now
-            </button>
+        <div className="fixed inset-x-0 z-40 px-3"
+          style={{ bottom: "max(12px, calc(env(safe-area-inset-bottom) + 8px))" }}>
+          <div className="rounded-[28px] border bg-white/95 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
+            style={{ borderColor: BORDER }}>
+            <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
+              <VariantPill color={selColor} size={selSize} />
+              <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: MUTED }}>
+                <span className="rounded-full px-2.5 py-1" style={{ background: BG, color: BLACK }}>
+                  Qty {quantity}
+                </span>
+                {cartQty > 0 && (
+                  <span className="rounded-full px-2.5 py-1" style={{ background: "#ecfdf5", color: "#047857" }}>
+                    {cartQty} in cart
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={handleAddToCart} disabled={addedToCart || cantAdd}
+                className="flex-1 flex items-center justify-center gap-1.5 py-3.5 rounded-full text-sm font-bold transition-all active:scale-[0.98]"
+                style={{
+                  fontFamily: F,
+                  background: addedToCart ? BLACK : cantAdd ? BG : "#f1f5f9",
+                  color: addedToCart ? "#fff" : cantAdd ? MUTED : BLACK,
+                  border: `1.5px solid ${cantAdd && !addedToCart ? BORDER : "transparent"}`,
+                  cursor: cantAdd ? "not-allowed" : "pointer",
+                }}>
+                {addedToCart ? <><Check className="w-4 h-4" /> Added!</> : <><ShoppingCart className="w-4 h-4" /> {addLabel()}</>}
+              </button>
+              <button onClick={(e) => { if (handleAddToCart(e)) router.push("/checkout"); }}
+                disabled={cantAdd}
+                className="flex-1 flex items-center justify-center py-3.5 rounded-full text-sm font-black transition-all active:scale-[0.98]"
+                style={{ fontFamily: F, background: cantAdd ? "#fca5a5" : ACCENT, color: "#fff", border: "none", cursor: cantAdd ? "not-allowed" : "pointer" }}>
+                Buy Now
+              </button>
+            </div>
           </div>
         </div>
       </div>

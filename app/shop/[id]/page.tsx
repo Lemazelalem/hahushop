@@ -94,7 +94,7 @@ function StarsRow({
                 filled ? "text-amber-400 drop-shadow-sm" : "text-slate-300",
               ].join(" ")}
             >
-              ★
+              {"\u2605"}
             </span>
           </button>
         );
@@ -397,14 +397,14 @@ export default function ProductDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 pb-32 md:pb-6">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 pb-40 md:pb-6">
         <div className="mb-6">
           <button
             type="button"
             onClick={() => router.push("/shop")}
             className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 mb-3"
           >
-            <span>←</span>
+            <span>{"\u2190"}</span>
             <span>Back to Shop</span>
           </button>
 
@@ -439,7 +439,7 @@ export default function ProductDetailPage() {
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                      <div className="text-6xl mb-2">{product.emoji || "🛍️"}</div>
+                      <div className="text-6xl mb-2">{product.emoji || "\u{1F6CD}\uFE0F"}</div>
                       <div className="text-sm">No image available</div>
                     </div>
                   )}
@@ -484,7 +484,7 @@ export default function ProductDetailPage() {
                     {ratingLoading ? "Loading ratings..." : avgLabel}
                     {ratingStats.count > 0 && (
                       <span className="ml-1">
-                        • {ratingStats.count} rating{ratingStats.count === 1 ? "" : "s"}
+                        {" \u2022 "}{ratingStats.count} rating{ratingStats.count === 1 ? "" : "s"}
                       </span>
                     )}
                   </span>
@@ -594,7 +594,7 @@ export default function ProductDetailPage() {
                     className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-medium border border-emerald-100 hover:bg-emerald-100 transition"
                   >
                     <ShoppingCart className="w-4 h-4" />
-                    {cartQuantity} in cart • View Cart
+                    {cartQuantity} in cart{" \u2022 "}View Cart
                   </button>
                 )}
 
@@ -638,8 +638,20 @@ export default function ProductDetailPage() {
 
       {/* Mobile sticky purchase bar */}
       {!loading && product && (
-        <div className="md:hidden fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
-          <div className="px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <div
+          className="md:hidden fixed inset-x-0 z-[100] px-3"
+          style={{ bottom: "max(12px, calc(env(safe-area-inset-bottom) + 8px))" }}
+        >
+          <div className="rounded-[28px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+            <div className="mb-2.5 flex items-center justify-between gap-2 px-1 text-xs text-slate-500">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+                {selectedQty} item{selectedQty === 1 ? "" : "s"}{" \u2022 "}{totalPrice}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                {cartQuantity} in cart
+              </span>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -672,12 +684,6 @@ export default function ProductDetailPage() {
               </button>
             </div>
 
-            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-              <span>
-                {selectedQty} item{selectedQty === 1 ? "" : "s"} • {totalPrice}
-              </span>
-              <span>{cartQuantity} in cart</span>
-            </div>
           </div>
         </div>
       )}
