@@ -1119,9 +1119,9 @@ export default function CheckoutPage() {
               {/* Stacked card edges peeking below (collapsed only) */}
               {!paymentExpanded && (
                 <>
-                  <div className="relative z-[5] mx-2 -mt-1.5 h-[10px] rounded-b-2xl bg-slate-200 border border-t-0 border-slate-300 shadow-sm" />
-                  <div className="relative z-[4] mx-4 -mt-1 h-[8px] rounded-b-2xl bg-slate-100 border border-t-0 border-slate-200" />
-                  <div className="relative z-[3] mx-6 -mt-0.5 h-[6px] rounded-b-xl bg-slate-50 border border-t-0 border-slate-100" />
+                  <div className="relative z-[5] mx-2 -mt-1.5 h-[10px] rounded-b-2xl bg-white border border-t-0 border-slate-400 shadow-[0_2px_4px_rgba(0,0,0,0.15)]" />
+                  <div className="relative z-[4] mx-4 -mt-1 h-[8px] rounded-b-2xl bg-white border border-t-0 border-slate-300 shadow-[0_2px_3px_rgba(0,0,0,0.1)]" />
+                  <div className="relative z-[3] mx-6 -mt-0.5 h-[6px] rounded-b-xl bg-white border border-t-0 border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.08)]" />
                 </>
               )}
             </div>
