@@ -2356,133 +2356,37 @@ function HomePageContent() {
     router.push("/checkout");
   }
 
+  // ── Parallel data fetch: all queries fire at once via Promise.all ──────────
   useEffect(() => {
-    async function loadCategories() {
-      setLoadingCategories(true);
-
-      try {
-        const { data, error } = await supabase
+    async function loadAll() {
+      const [
+        catRes,
+        heroRes,
+        newRes,
+        dealsRes,
+        topRes,
+        topPicksRes,
+        exploreRes,
+      ] = await Promise.all([
+        supabase
           .from("categories")
           .select("id,name,slug")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true });
-
-        if (error) {
-          console.error("Failed to load categories:", error);
-          setDbCategories([]);
-          setCategoryMap({});
-          return;
-        }
-
-        setDbCategories(data ?? []);
-        const map: Record<string, string> = {};
-        for (const c of data ?? []) {
-          map[c.slug] = c.id;
-          map[c.slug.replace(/-/g, "_")] = c.id;
-        }
-        setCategoryMap(map);
-      } catch (err) {
-        console.error("Unexpected error loading categories:", err);
-        setDbCategories([]);
-        setCategoryMap({});
-      } finally {
-        setLoadingCategories(false);
-      }
-    }
-
-    loadCategories();
-  }, []);
-
-  useEffect(() => {
-    async function loadTopPicks() {
-      setLoadingTopPicks(true);
-
-      try {
-        const { data, error } = await supabase
+          .order("name", { ascending: true }),
+        supabase
+          .from("hero_slides")
+          .select("id,title,tagline,image_url,link_url")
+          .eq("is_active", true)
+          .eq("is_archived", false)
+          .order("sort_order", { ascending: true }),
+        supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
           .eq("is_active", true)
-          .gt("rating_count", 10)
-          .order("rating_avg", { ascending: false })
-          .limit(8);
-
-        if (error) {
-          console.error("Failed to load top picks:", error);
-          setTopPicks([]);
-          return;
-        }
-
-        setTopPicks((data ?? []).map(mapProduct));
-      } catch (err) {
-        console.error("Unexpected error loading top picks:", err);
-        setTopPicks([]);
-      } finally {
-        setLoadingTopPicks(false);
-      }
-    }
-
-    loadTopPicks();
-  }, []);
-
-  useEffect(() => {
-    async function loadHero() {
-      const { data } = await supabase
-        .from("hero_slides")
-        .select("id,title,tagline,image_url,link_url")
-        .eq("is_active", true)
-        .eq("is_archived", false)
-        .order("sort_order", { ascending: true });
-
-      setHeroSlides(
-        data?.length
-          ? data
-          : [
-              {
-                id: "1",
-                title: "New Arrivals",
-                tagline: "Check out the latest trends",
-                image_url: null,
-                link_url: "/shop",
-              },
-              {
-                id: "2",
-                title: "Summer Sale",
-                tagline: "Up to 50% off",
-                image_url: null,
-                link_url: "/shop",
-              },
-            ]
-      );
-    }
-
-    loadHero();
-  }, []);
-
-  useEffect(() => {
-    async function load() {
-      setLoadingNew(true);
-      const { data } = await supabase
-        .from("products")
-        .select(PRODUCT_FIELDS)
-        .eq("status", "approved")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(8);
-
-      setNewArrivals((data ?? []).map(mapProduct));
-      setLoadingNew(false);
-    }
-
-    load();
-  }, []);
-
-  useEffect(() => {
-    async function load() {
-      setLoadingDeals(true);
-
-      try {
-        const { data, error } = await supabase
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
@@ -2491,77 +2395,91 @@ function HomePageContent() {
           .not("final_price_cents", "is", null)
           .gt("price_cents", 0)
           .gt("final_price_cents", 0)
-          .limit(50);
+          .limit(50),
+        supabase
+          .from("products")
+          .select(PRODUCT_FIELDS)
+          .eq("status", "approved")
+          .eq("is_active", true)
+          .gt("rating_count", 0)
+          .order("rating_avg", { ascending: false })
+          .order("rating_count", { ascending: false })
+          .limit(8),
+        supabase
+          .from("products")
+          .select(PRODUCT_FIELDS)
+          .eq("status", "approved")
+          .eq("is_active", true)
+          .gt("rating_count", 10)
+          .order("rating_avg", { ascending: false })
+          .limit(8),
+        supabase
+          .from("products")
+          .select(PRODUCT_FIELDS)
+          .eq("status", "approved")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .range(8, 32),
+      ]);
 
-        if (error) {
-          console.error("Failed to load deals:", error);
-          setDeals([]);
-          return;
+      // Categories
+      if (!catRes.error && catRes.data) {
+        setDbCategories(catRes.data);
+        const map: Record<string, string> = {};
+        for (const c of catRes.data) {
+          map[c.slug] = c.id;
+          map[c.slug.replace(/-/g, "_")] = c.id;
         }
-
-        const rows = (data ?? [])
-          .map(mapProduct)
-          .filter(
-            (p) =>
-              p.original_price_cents &&
-              p.final_price_cents &&
-              p.final_price_cents < p.original_price_cents
-          )
-          .sort(
-            (a, b) =>
-              discountPct(b.original_price_cents, b.final_price_cents) -
-              discountPct(a.original_price_cents, a.final_price_cents)
-          )
-          .slice(0, 8);
-
-        setDeals(rows);
-      } catch (err) {
-        console.error("Unexpected error loading deals:", err);
-        setDeals([]);
-      } finally {
-        setLoadingDeals(false);
+        setCategoryMap(map);
       }
-    }
+      setLoadingCategories(false);
 
-    load();
-  }, []);
+      // Hero slides
+      setHeroSlides(
+        heroRes.data?.length
+          ? heroRes.data
+          : [
+              { id: "1", title: "New Arrivals", tagline: "Check out the latest trends", image_url: null, link_url: "/shop" },
+              { id: "2", title: "Summer Sale", tagline: "Up to 50% off", image_url: null, link_url: "/shop" },
+            ]
+      );
 
-  useEffect(() => {
-    async function load() {
-      setLoadingTop(true);
-      const { data } = await supabase
-        .from("products")
-        .select(PRODUCT_FIELDS)
-        .eq("status", "approved")
-        .eq("is_active", true)
-        .gt("rating_count", 0)
-        .order("rating_avg", { ascending: false })
-        .order("rating_count", { ascending: false })
-        .limit(8);
+      // New arrivals
+      setNewArrivals((newRes.data ?? []).map(mapProduct));
+      setLoadingNew(false);
 
-      setTopRated((data ?? []).map(mapProduct));
+      // Deals
+      const dealRows = (dealsRes.data ?? [])
+        .map(mapProduct)
+        .filter(
+          (p) =>
+            p.original_price_cents &&
+            p.final_price_cents &&
+            p.final_price_cents < p.original_price_cents
+        )
+        .sort(
+          (a, b) =>
+            discountPct(b.original_price_cents, b.final_price_cents) -
+            discountPct(a.original_price_cents, a.final_price_cents)
+        )
+        .slice(0, 8);
+      setDeals(dealRows);
+      setLoadingDeals(false);
+
+      // Top rated
+      setTopRated((topRes.data ?? []).map(mapProduct));
       setLoadingTop(false);
-    }
 
-    load();
-  }, []);
+      // Top picks
+      setTopPicks((topPicksRes.data ?? []).map(mapProduct));
+      setLoadingTopPicks(false);
 
-  useEffect(() => {
-    async function load() {
-      setLoadingExplore(true);
-      const { data } = await supabase
-        .from("products")
-        .select(PRODUCT_FIELDS)
-        .eq("status", "approved")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .range(8, 32);
-
-      setExplore((data ?? []).map(mapProduct));
+      // Explore
+      setExplore((exploreRes.data ?? []).map(mapProduct));
       setLoadingExplore(false);
     }
 
-    load();
+    loadAll();
   }, []);
 
   const {

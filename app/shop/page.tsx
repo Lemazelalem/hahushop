@@ -596,35 +596,35 @@ function ShopPageContent() {
         setLoading(true);
         setPageError(null);
 
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from("categories")
-          .select("id, name, slug")
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true });
+        const [catRes, prodRes] = await Promise.all([
+          supabase
+            .from("categories")
+            .select("id, name, slug")
+            .order("sort_order", { ascending: true })
+            .order("name", { ascending: true }),
+          supabase
+            .from("products")
+            .select(`
+              id, status, name, description, emoji, image_url,
+              final_price_cents, price_cents, rating_avg, rating_count, created_at,
+              categories(id, name)
+            `)
+            .eq("status", "approved")
+            .eq("is_active", true)
+            .order("created_at", { ascending: false }),
+        ]);
 
         if (!alive) return;
-        if (!categoriesError) setCategories(categoriesData || []);
 
-        const { data, error } = await supabase
-          .from("products")
-          .select(`
-            id, status, name, description, emoji, image_url,
-            final_price_cents, price_cents, rating_avg, rating_count, created_at,
-            categories(id, name)
-          `)
-          .eq("status", "approved")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false });
+        if (!catRes.error) setCategories(catRes.data || []);
 
-        if (!alive) return;
-
-        if (error) {
-          setPageError(error.message || "Could not load products.");
+        if (prodRes.error) {
+          setPageError(prodRes.error.message || "Could not load products.");
           setProducts([]);
           return;
         }
 
-        const rows = (data ?? []).map((row: any) => ({
+        const rows = (prodRes.data ?? []).map((row: any) => ({
           id: row.id as string,
           status: (row.status as ProductStatus) ?? "approved",
           name: (row.name as string) ?? "",
