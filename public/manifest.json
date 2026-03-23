@@ -4,8 +4,8 @@
   "description": "Shopping become easier",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#A3E635",
-  "theme_color": "#A3E635",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "orientation": "portrait",
   "icons": [
     {
