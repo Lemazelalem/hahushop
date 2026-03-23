@@ -783,9 +783,10 @@ export default function ProductDetailsPage() {
               </button>
               <button onClick={(e) => { if (handleAddToCart(e)) router.push("/checkout"); }}
                 disabled={cantAdd}
-                className="flex-1 flex items-center justify-center py-3.5 rounded-full text-sm font-black transition-all active:scale-[0.98]"
+                className="flex-1 flex flex-col items-center justify-center py-2.5 rounded-full text-sm font-black transition-all active:scale-[0.98]"
                 style={{ fontFamily: F, background: cantAdd ? "#fca5a5" : ACCENT, color: "#fff", border: "none", cursor: cantAdd ? "not-allowed" : "pointer" }}>
-                Buy Now
+                <span>Buy Now</span>
+                <span className="text-[11px] font-semibold leading-none opacity-90">Free shipping</span>
               </button>
             </div>
           </div>
