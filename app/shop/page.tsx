@@ -201,18 +201,12 @@ function CameraToast({
   visible: boolean;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!visible) return;
-    const t = setTimeout(onClose, 3000);
-    return () => clearTimeout(t);
-  }, [visible, onClose]);
-
   if (!visible) return null;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl shadow-black/30 animate-in slide-in-from-bottom-4 duration-300">
-      <Camera className="w-4 h-4 text-blue-400" />
-      <span>Visual search coming soon — image received!</span>
+      <Camera className="w-4 h-4 text-blue-400 animate-pulse" />
+      <span>Analyzing image…</span>
       <button
         type="button"
         onClick={onClose}
@@ -547,8 +541,12 @@ function ShopPageContent() {
     return (searchParams.get("category") || "").toLowerCase();
   }, [searchParams]);
 
+  const initialSearch = useMemo(() => {
+    return searchParams.get("q") || "";
+  }, [searchParams]);
+
   const [filters, setFilters] = useState<FilterState>(() => ({
-    search: "",
+    search: initialSearch,
     category: initialCategory,
     sortBy: "newest",
     viewMode: "grid",
@@ -577,6 +575,14 @@ function ShopPageContent() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Sync search filter when navigated with ?q= param (e.g. from visual search)
+  useEffect(() => {
+    if (initialSearch) {
+      setFilters((prev) => ({ ...prev, search: initialSearch, category: "" }));
+      setMobileCategory("All");
+    }
+  }, [initialSearch]);
 
   const approvedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
@@ -793,11 +799,34 @@ function ShopPageContent() {
   );
 
   const handleCameraImageSelected = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      setCameraToastVisible(true);
       e.target.value = "";
+
+      setCameraToastVisible(true);
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result as string;
+          const res = await fetch("/api/visual-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64 }),
+          });
+          const data = await res.json();
+          setCameraToastVisible(false);
+
+          if (res.ok && data.searchTerm) {
+            setFilters((prev) => ({ ...prev, search: data.searchTerm, category: "" }));
+            setMobileCategory("All");
+          }
+        } catch {
+          setCameraToastVisible(false);
+        }
+      };
+      reader.readAsDataURL(file);
     },
     []
   );

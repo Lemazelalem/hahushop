@@ -2631,25 +2631,35 @@ function HomePageContent() {
     imageInputRef.current?.click();
   }
 
-  function handleImagePicked(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleImagePicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
 
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
-        if (typeof window !== "undefined" && typeof reader.result === "string") {
-          sessionStorage.setItem("shopease_visual_search_image", reader.result);
-          sessionStorage.setItem("shopease_visual_search_name", file.name);
-        }
+        const base64 = reader.result as string;
+        setSelectedImage(base64);
+        mobileToast.show("Analyzing image…", "info");
 
-        setSelectedImage(reader.result as string);
-        mobileToast.show("Image uploaded", "success");
-        router.push("/shop");
+        const res = await fetch("/api/visual-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.searchTerm) {
+          mobileToast.show(`Found: ${data.searchTerm}`, "success");
+          router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}`);
+        } else {
+          mobileToast.show(data.error || "Could not identify product", "error");
+        }
       } catch (err) {
-        console.error("Image pick error:", err);
-        mobileToast.show("Could not use image", "error");
+        console.error("Visual search error:", err);
+        mobileToast.show("Visual search failed", "error");
       }
     };
 
