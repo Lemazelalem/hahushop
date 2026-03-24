@@ -591,9 +591,18 @@ function ShopPageContent() {
   useEffect(() => {
     let alive = true;
 
+    // Restore cached data instantly
+    try {
+      const cached = localStorage.getItem("hahu-shop-cache");
+      if (cached) {
+        const c = JSON.parse(cached);
+        if (c.categories?.length) setCategories(c.categories);
+        if (c.products?.length) { setProducts(c.products); setLoading(false); }
+      }
+    } catch { /* ignore */ }
+
     async function load() {
       try {
-        setLoading(true);
         setPageError(null);
 
         const [catRes, prodRes] = await Promise.all([
@@ -641,6 +650,15 @@ function ShopPageContent() {
         }));
 
         setProducts(rows);
+
+        // Cache for next visit
+        try {
+          localStorage.setItem("hahu-shop-cache", JSON.stringify({
+            categories: catRes.data ?? [],
+            products: rows,
+            ts: Date.now(),
+          }));
+        } catch { /* storage full */ }
       } catch (err) {
         console.error("[shop] unexpected error:", err);
         if (!alive) return;

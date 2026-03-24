@@ -2356,8 +2356,33 @@ function HomePageContent() {
     router.push("/checkout");
   }
 
-  // ── Parallel data fetch: all queries fire at once via Promise.all ──────────
+  // ── Stale-while-revalidate: show cached data instantly, refresh in background ─
   useEffect(() => {
+    // Restore cached data immediately so the page isn't blank
+    try {
+      const cached = localStorage.getItem("hahu-home-cache");
+      if (cached) {
+        const c = JSON.parse(cached);
+        if (c.categories) {
+          setDbCategories(c.categories);
+          const map: Record<string, string> = {};
+          for (const cat of c.categories) {
+            map[cat.slug] = cat.id;
+            map[cat.slug.replace(/-/g, "_")] = cat.id;
+          }
+          setCategoryMap(map);
+        }
+        if (c.hero?.length) setHeroSlides(c.hero);
+        if (c.newArrivals?.length) { setNewArrivals(c.newArrivals); setLoadingNew(false); }
+        if (c.deals?.length) { setDeals(c.deals); setLoadingDeals(false); }
+        if (c.topRated?.length) { setTopRated(c.topRated); setLoadingTop(false); }
+        if (c.topPicks?.length) { setTopPicks(c.topPicks); setLoadingTopPicks(false); }
+        if (c.explore?.length) { setExplore(c.explore); setLoadingExplore(false); }
+        setLoadingCategories(false);
+      }
+    } catch { /* ignore corrupt cache */ }
+
+    // Fetch fresh data in background
     async function loadAll() {
       const [
         catRes,
@@ -2445,7 +2470,8 @@ function HomePageContent() {
       );
 
       // New arrivals
-      setNewArrivals((newRes.data ?? []).map(mapProduct));
+      const newMapped = (newRes.data ?? []).map(mapProduct);
+      setNewArrivals(newMapped);
       setLoadingNew(false);
 
       // Deals
@@ -2467,16 +2493,33 @@ function HomePageContent() {
       setLoadingDeals(false);
 
       // Top rated
-      setTopRated((topRes.data ?? []).map(mapProduct));
+      const topMapped = (topRes.data ?? []).map(mapProduct);
+      setTopRated(topMapped);
       setLoadingTop(false);
 
       // Top picks
-      setTopPicks((topPicksRes.data ?? []).map(mapProduct));
+      const topPicksMapped = (topPicksRes.data ?? []).map(mapProduct);
+      setTopPicks(topPicksMapped);
       setLoadingTopPicks(false);
 
       // Explore
-      setExplore((exploreRes.data ?? []).map(mapProduct));
+      const exploreMapped = (exploreRes.data ?? []).map(mapProduct);
+      setExplore(exploreMapped);
       setLoadingExplore(false);
+
+      // Cache for instant load next visit
+      try {
+        localStorage.setItem("hahu-home-cache", JSON.stringify({
+          categories: catRes.data ?? [],
+          hero: heroRes.data ?? [],
+          newArrivals: newMapped,
+          deals: dealRows,
+          topRated: topMapped,
+          topPicks: topPicksMapped,
+          explore: exploreMapped,
+          ts: Date.now(),
+        }));
+      } catch { /* storage full — ignore */ }
     }
 
     loadAll();
