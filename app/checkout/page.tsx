@@ -944,7 +944,7 @@ export default function CheckoutPage() {
           {mergedItems.map((item) => (
             <div key={item.key} className="p-2.5 flex gap-2.5">
               <div
-                onClick={() => router.push(`/products/${item.id}`)}
+                onClick={() => router.push(`/shop/${item.id}`)}
                 className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 cursor-pointer active:scale-95 transition-transform"
               >
                 {item.image ? (
@@ -964,7 +964,7 @@ export default function CheckoutPage() {
                       )}
                     </div>
                     <h3
-                      onClick={() => router.push(`/products/${item.id}`)}
+                      onClick={() => router.push(`/shop/${item.id}`)}
                       className="text-[12px] leading-tight font-bold text-slate-900 line-clamp-2 cursor-pointer"
                     >
                       {item.name}
@@ -1396,7 +1396,7 @@ export default function CheckoutPage() {
                                   )}
                                   <button
                                     onClick={() =>
-                                      router.push(`/products/${item.id}`)
+                                      router.push(`/shop/${item.id}`)
                                     }
                                     className="text-[10px] text-blue-500 hover:text-blue-700 underline underline-offset-2"
                                   >

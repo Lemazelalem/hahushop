@@ -1366,7 +1366,7 @@ export default function SellerProductDetailPage() {
 
             {product.status === "approved" && (
               <a
-                href={`/products/${product.id}`}
+                href={`/shop/${product.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 text-sm transition-colors"

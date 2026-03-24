@@ -1133,7 +1133,7 @@ function ShopPageContent() {
                       p={p}
                       qtyInCart={qtyInCart}
                       isWishlisted={isWishlisted}
-                      onNavigate={(id) => router.push(`/products/${id}`)}
+                      onNavigate={(id) => router.push(`/shop/${id}`)}
                       onToggleWishlist={toggleWishlist}
                     />
                   );
@@ -1164,7 +1164,7 @@ function ShopPageContent() {
                         className="group bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 flex"
                       >
                         <div
-                          onClick={() => router.push(`/products/${p.id}`)}
+                          onClick={() => router.push(`/shop/${p.id}`)}
                           className="relative w-56 h-56 bg-slate-50 cursor-pointer overflow-hidden flex-shrink-0"
                         >
                           {p.image_url ? (
@@ -1204,7 +1204,7 @@ function ShopPageContent() {
                                   {displayCategoryName(p.category_name)}
                                 </span>
                                 <h3
-                                  onClick={() => router.push(`/products/${p.id}`)}
+                                  onClick={() => router.push(`/shop/${p.id}`)}
                                   className="text-2xl font-bold text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
                                 >
                                   {p.name}
@@ -1242,7 +1242,7 @@ function ShopPageContent() {
                             </div>
                             <div className="flex items-center gap-4">
                               <button
-                                onClick={() => router.push(`/products/${p.id}`)}
+                                onClick={() => router.push(`/shop/${p.id}`)}
                                 className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-slate-200 text-slate-700 font-bold hover:border-blue-500 hover:text-blue-600 transition-all"
                               >
                                 <Eye className="w-4 h-4" />
@@ -1261,7 +1261,7 @@ function ShopPageContent() {
                       className="group bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-2xl hover:border-blue-300 transition-all duration-300 flex flex-col"
                     >
                       <div
-                        onClick={() => router.push(`/products/${p.id}`)}
+                        onClick={() => router.push(`/shop/${p.id}`)}
                         className="relative aspect-square bg-slate-50 cursor-pointer overflow-hidden"
                       >
                         {p.image_url ? (
@@ -1301,7 +1301,7 @@ function ShopPageContent() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/products/${p.id}`);
+                            router.push(`/shop/${p.id}`);
                           }}
                           className="absolute bottom-4 right-4 p-3 bg-white/95 text-slate-700 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white"
                         >
@@ -1316,7 +1316,7 @@ function ShopPageContent() {
                           <DeliveryBadge />
                         </div>
                         <h3
-                          onClick={() => router.push(`/products/${p.id}`)}
+                          onClick={() => router.push(`/shop/${p.id}`)}
                           className="font-bold text-slate-900 leading-snug mb-3 line-clamp-2 cursor-pointer hover:text-blue-600 transition-colors min-h-[2.75rem]"
                         >
                           {p.name}
@@ -1336,7 +1336,7 @@ function ShopPageContent() {
                             )}
                           </div>
                           <button
-                            onClick={() => router.push(`/products/${p.id}`)}
+                            onClick={() => router.push(`/shop/${p.id}`)}
                             className="text-slate-700 text-sm font-bold px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:text-blue-600 transition-all flex items-center gap-2"
                           >
                             <Eye className="w-4 h-4" />

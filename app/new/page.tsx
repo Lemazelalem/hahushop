@@ -331,7 +331,7 @@ export default function NewArrivalsPage() {
                 >
                   {/* Image */}
                   <div
-                    onClick={() => router.push(`/products/${p.id}`)}
+                    onClick={() => router.push(`/shop/${p.id}`)}
                     className="relative aspect-square bg-slate-50 cursor-pointer overflow-hidden"
                   >
                     {p.image_url ? (
@@ -386,7 +386,7 @@ export default function NewArrivalsPage() {
 
                     {/* Quick view */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); router.push(`/products/${p.id}`); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/shop/${p.id}`); }}
                       className="absolute bottom-3 right-3 p-2.5 bg-white/90 text-slate-700 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white"
                     >
                       <Eye className="w-4 h-4" />
@@ -404,7 +404,7 @@ export default function NewArrivalsPage() {
                       <DaysAgoBadge days={p.days_ago} />
                     </div>
                     <h3
-                      onClick={() => router.push(`/products/${p.id}`)}
+                      onClick={() => router.push(`/shop/${p.id}`)}
                       className="text-sm font-bold text-slate-900 line-clamp-2 cursor-pointer hover:text-blue-600 transition-colors mb-2 flex-1"
                     >
                       {p.name}

@@ -244,25 +244,25 @@ export default function ProductDetailsPage() {
   useEffect(() => {
     const id = params?.id;
     if (!id) return;
+    let cancelled = false;
     (async () => {
       setLoading(true); setPageError(null);
       try {
-        const { data: ud } = await supabase.auth.getUser();
-        const uid = ud?.user?.id ?? null;
-        setUserId(uid);
-
-        if (uid) {
-          const { data: pe } = await supabase.from("public_employee_documents")
-            .select("status").eq("user_id", uid).eq("status", "approved").maybeSingle();
-          if (pe) setIsPE(true);
-        }
-
-        const { data: raw, error: pe2 } = await supabase.from("products")
+        const authPromise = supabase.auth.getUser();
+        const productPromise = supabase.from("products")
           .select(`id, seller_id, category_id, name, description, emoji, status,
             image_url, extra_image_urls, price_cents, final_price_cents,
             public_employee_price_cents, stock_quantity, rating_avg, rating_count,
             created_at, color_variants, size_variants, categories(name)`)
           .eq("id", id).eq("status", "approved").eq("is_active", true).maybeSingle();
+
+        const [{ data: ud }, { data: raw, error: pe2 }] = await Promise.all([
+          authPromise,
+          productPromise,
+        ]);
+        const uid = ud?.user?.id ?? null;
+        if (cancelled) return;
+        setUserId(uid);
 
         if (pe2) { setPageError(pe2.message); setLoading(false); return; }
         if (!raw)  { setPageError("Product not found."); setLoading(false); return; }
@@ -279,49 +279,88 @@ export default function ProductDetailsPage() {
           created_at: p.created_at, category_name: p.categories?.name ?? null,
           color_variants: p.color_variants ?? null, size_variants: p.size_variants ?? null,
         };
+        if (cancelled) return;
         setProduct(mapped);
         setImgIdx(0); setSelColorId(null); setSelSizeId(null); setQuantity(1);
+        setMoreFromSeller([]);
+        setSimilar([]);
+        setMyRatingRow(null);
+        setMyRating(0);
+        setIsPE(false);
+        setLoading(false);
 
-        if (uid) {
-          const { data: rr } = await supabase.from("product_ratings")
-            .select("id, product_id, user_id, rating")
-            .eq("product_id", mapped.id).eq("user_id", uid).maybeSingle();
-          if (rr) { setMyRatingRow(rr as RatingRow); setMyRating((rr as RatingRow).rating); }
-        }
+        void (async () => {
+          try {
+            if (uid) {
+              const [{ data: pe }, { data: rr }] = await Promise.all([
+                supabase.from("public_employee_documents")
+                  .select("status").eq("user_id", uid).eq("status", "approved").maybeSingle(),
+                supabase.from("product_ratings")
+                  .select("id, product_id, user_id, rating")
+                  .eq("product_id", mapped.id).eq("user_id", uid).maybeSingle(),
+              ]);
 
-        const norm = (sp: any): ProductRow => ({
-          ...sp, stock_quantity: sp.stock_quantity ?? null,
-          rating_avg: Number(sp.rating_avg ?? 0), rating_count: Number(sp.rating_count ?? 0),
-          category_name: sp.categories?.name ?? null,
-          color_variants: sp.color_variants ?? null, size_variants: sp.size_variants ?? null,
-        });
+              if (!cancelled) {
+                setIsPE(Boolean(pe));
+                if (rr) {
+                  setMyRatingRow(rr as RatingRow);
+                  setMyRating((rr as RatingRow).rating);
+                }
+              }
+            }
 
-        if (mapped.seller_id) {
-          const { data } = await supabase.from("products")
-            .select(`id, seller_id, category_id, name, description, emoji, status,
-              image_url, extra_image_urls, price_cents, final_price_cents,
-              public_employee_price_cents, stock_quantity, rating_avg, rating_count,
-              created_at, color_variants, size_variants, categories(name)`)
-            .eq("seller_id", mapped.seller_id).eq("status", "approved").eq("is_active", true)
-            .neq("id", mapped.id).order("created_at", { ascending: false }).limit(8);
-          if (data) setMoreFromSeller((data as any[]).map(norm));
-        }
-        if (mapped.category_id) {
-          const { data } = await supabase.from("products")
-            .select(`id, seller_id, category_id, name, description, emoji, status,
-              image_url, extra_image_urls, price_cents, final_price_cents,
-              public_employee_price_cents, stock_quantity, rating_avg, rating_count,
-              created_at, color_variants, size_variants, categories(name)`)
-            .eq("category_id", mapped.category_id).eq("status", "approved").eq("is_active", true)
-            .neq("id", mapped.id).order("created_at", { ascending: false }).limit(10);
-          if (data) setSimilar((data as any[]).map(norm));
-        }
+            const norm = (sp: any): ProductRow => ({
+              ...sp, stock_quantity: sp.stock_quantity ?? null,
+              rating_avg: Number(sp.rating_avg ?? 0), rating_count: Number(sp.rating_count ?? 0),
+              category_name: sp.categories?.name ?? null,
+              color_variants: sp.color_variants ?? null, size_variants: sp.size_variants ?? null,
+            });
+
+            const relatedTasks = [];
+
+            if (mapped.seller_id) {
+              relatedTasks.push(
+                supabase.from("products")
+                  .select(`id, seller_id, category_id, name, description, emoji, status,
+                    image_url, extra_image_urls, price_cents, final_price_cents,
+                    public_employee_price_cents, stock_quantity, rating_avg, rating_count,
+                    created_at, color_variants, size_variants, categories(name)`)
+                  .eq("seller_id", mapped.seller_id).eq("status", "approved").eq("is_active", true)
+                  .neq("id", mapped.id).order("created_at", { ascending: false }).limit(8)
+                  .then(({ data }) => {
+                    if (!cancelled && data) setMoreFromSeller((data as any[]).map(norm));
+                  })
+              );
+            }
+
+            if (mapped.category_id) {
+              relatedTasks.push(
+                supabase.from("products")
+                  .select(`id, seller_id, category_id, name, description, emoji, status,
+                    image_url, extra_image_urls, price_cents, final_price_cents,
+                    public_employee_price_cents, stock_quantity, rating_avg, rating_count,
+                    created_at, color_variants, size_variants, categories(name)`)
+                  .eq("category_id", mapped.category_id).eq("status", "approved").eq("is_active", true)
+                  .neq("id", mapped.id).order("created_at", { ascending: false }).limit(10)
+                  .then(({ data }) => {
+                    if (!cancelled && data) setSimilar((data as any[]).map(norm));
+                  })
+              );
+            }
+
+            await Promise.allSettled(relatedTasks);
+          } catch {
+            // Background product-detail enrichments should not block the main page.
+          }
+        })();
       } catch (err: any) {
         setPageError(err?.message || "Unexpected error.");
-      } finally {
         setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [params?.id]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -733,7 +772,7 @@ export default function ProductDetailsPage() {
               <div className="text-[11px] font-black uppercase tracking-widest mb-3" style={{ color: MUTED }}>You May Also Like</div>
               <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none]">
                 {similar.slice(0, 8).map(p => (
-                  <MiniCard key={p.id} product={p} onClick={() => router.push(`/products/${p.id}`)} isPE={isPE} />
+                  <MiniCard key={p.id} product={p} onClick={() => router.push(`/shop/${p.id}`)} isPE={isPE} />
                 ))}
               </div>
             </div>
@@ -1089,7 +1128,7 @@ export default function ProductDetailsPage() {
                 <span className="text-xs" style={{ color: MUTED }}>{moreFromSeller.length} items</span>
               </div>
               <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none]">
-                {moreFromSeller.map(p => <MiniCard key={p.id} product={p} onClick={() => router.push(`/products/${p.id}`)} isPE={isPE} />)}
+                {moreFromSeller.map(p => <MiniCard key={p.id} product={p} onClick={() => router.push(`/shop/${p.id}`)} isPE={isPE} />)}
               </div>
             </section>
           )}
@@ -1102,7 +1141,7 @@ export default function ProductDetailsPage() {
                 <span className="text-xs" style={{ color: MUTED }}>You might also like</span>
               </div>
               <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none]">
-                {similar.map(p => <MiniCard key={p.id} product={p} onClick={() => router.push(`/products/${p.id}`)} isPE={isPE} />)}
+                {similar.map(p => <MiniCard key={p.id} product={p} onClick={() => router.push(`/shop/${p.id}`)} isPE={isPE} />)}
               </div>
             </section>
           )}

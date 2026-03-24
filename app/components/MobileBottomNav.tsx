@@ -17,9 +17,11 @@ export default function MobileBottomNav() {
 
   const shouldHideNav = useMemo(() => {
     if (!pathname) return false;
+    const isShopDetail = pathname.startsWith("/shop/") && pathname !== "/shop";
 
     return (
       pathname.startsWith("/products/") ||
+      isShopDetail ||
       pathname === "/checkout" ||
       pathname.startsWith("/checkout/") ||
       pathname === "/cart" ||

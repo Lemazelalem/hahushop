@@ -1497,10 +1497,10 @@ export default function PublicEmployeePage() {
   const handleOpenProduct = useCallback(
     (p: ProductRow) => {
       if (canShop) {
-        router.push(`/products/${p.id}`);
+        router.push(`/shop/${p.id}`);
         return;
       }
-      goPublicEmployeeSignup(p.id, `/products/${p.id}`);
+      goPublicEmployeeSignup(p.id, `/shop/${p.id}`);
     },
     [canShop, router]
   );
@@ -1508,12 +1508,12 @@ export default function PublicEmployeePage() {
   const handleAddToCart = useCallback(
     (p: ProductRow, sourceEl?: HTMLElement | null) => {
       if (!canShop) {
-        goPublicEmployeeSignup(p.id, `/products/${p.id}`);
+        goPublicEmployeeSignup(p.id, `/shop/${p.id}`);
         return;
       }
 
       if (hasVariants(p)) {
-        router.push(`/products/${p.id}`);
+        router.push(`/shop/${p.id}`);
         return;
       }
 

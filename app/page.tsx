@@ -2602,7 +2602,7 @@ function HomePageContent() {
 
   // Product navigation - no auth gate, immediate browsing
   function goToProduct(id: string) {
-    router.push(`/products/${id}`);
+    router.push(`/shop/${id}`);
   }
 
   // Cart navigation - with auth gate for non-authenticated users
