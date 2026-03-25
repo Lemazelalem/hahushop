@@ -166,7 +166,10 @@ function useMToast() {
 
   const show = useCallback((msg: string, type = "info") => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
-    setToasts((prev) => [...prev, { id, msg, type }]);
+    /* clear all previous toasts so only the latest one shows */
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setToasts([{ id, msg, type }]);
     const t = setTimeout(() => {
       setToasts((prev) => prev.filter((x) => x.id !== id));
     }, 2200);
