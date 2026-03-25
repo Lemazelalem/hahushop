@@ -523,22 +523,22 @@ function ProductImage({
   
   if (!src || error) {
     return (
-      <div 
-        className={cx("flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-50", className)}
+      <div
+        className={cx("w-full h-full flex items-start justify-center bg-gradient-to-br from-slate-100 to-slate-50", className)}
         style={style}
         aria-label={alt}
       >
-        <span className="text-4xl">{emoji ?? "📦"}</span>
+        <span className="text-4xl mt-4">{emoji ?? "📦"}</span>
       </div>
     );
   }
-  
+
   return (
-    <img 
-      src={src} 
+    <img
+      src={src}
       alt={alt}
       onError={() => setError(true)}
-      className={cx("object-cover", className)}
+      className={cx("w-full h-full object-cover", className)}
       style={style}
       loading="lazy"
     />
