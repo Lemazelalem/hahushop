@@ -798,6 +798,27 @@ function ShopPageContent() {
     [router]
   );
 
+  function resizeImage(file: File, maxSize = 512): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
+        } else {
+          if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   const handleCameraImageSelected = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -806,27 +827,23 @@ function ShopPageContent() {
 
       setCameraToastVisible(true);
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64 = reader.result as string;
-          const res = await fetch("/api/visual-search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: base64 }),
-          });
-          const data = await res.json();
-          setCameraToastVisible(false);
+      try {
+        const base64 = await resizeImage(file);
+        const res = await fetch("/api/visual-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 }),
+        });
+        const data = await res.json();
+        setCameraToastVisible(false);
 
-          if (res.ok && data.searchTerm) {
-            setFilters((prev) => ({ ...prev, search: data.searchTerm, category: "" }));
-            setMobileCategory("All");
-          }
-        } catch {
-          setCameraToastVisible(false);
+        if (res.ok && data.searchTerm) {
+          setFilters((prev) => ({ ...prev, search: data.searchTerm, category: "" }));
+          setMobileCategory("All");
         }
-      };
-      reader.readAsDataURL(file);
+      } catch {
+        setCameraToastVisible(false);
+      }
     },
     []
   );

@@ -58,10 +58,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      console.error("[visual-search] OpenAI error:", err);
+      const errText = await response.text();
+      console.error("[visual-search] OpenAI error:", response.status, errText);
       return NextResponse.json(
-        { error: "Could not analyze image" },
+        { error: `OpenAI error (${response.status}): ${errText.slice(0, 200)}` },
         { status: 502 }
       );
     }

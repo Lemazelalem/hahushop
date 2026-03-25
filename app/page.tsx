@@ -2631,45 +2631,55 @@ function HomePageContent() {
     imageInputRef.current?.click();
   }
 
+  function resizeImage(file: File, maxSize = 512): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
+        } else {
+          if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   async function handleImagePicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = async () => {
-      try {
-        const base64 = reader.result as string;
-        setSelectedImage(base64);
-        mobileToast.show("Analyzing image…", "info");
-
-        const res = await fetch("/api/visual-search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64 }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.searchTerm) {
-          mobileToast.show(`Found: ${data.searchTerm}`, "success");
-          router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}`);
-        } else {
-          mobileToast.show(data.error || "Could not identify product", "error");
-        }
-      } catch (err) {
-        console.error("Visual search error:", err);
-        mobileToast.show("Visual search failed", "error");
-      }
-    };
-
-    reader.onerror = () => {
-      mobileToast.show("Failed to read image", "error");
-    };
-
-    reader.readAsDataURL(file);
-
     e.currentTarget.value = "";
+
+    try {
+      mobileToast.show("Analyzing image…", "info");
+      const base64 = await resizeImage(file);
+      setSelectedImage(base64);
+
+      const res = await fetch("/api/visual-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.searchTerm) {
+        mobileToast.show(`Found: ${data.searchTerm}`, "success");
+        router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}`);
+      } else {
+        mobileToast.show(data.error || "Could not identify product", "error");
+      }
+    } catch (err) {
+      console.error("Visual search error:", err);
+      mobileToast.show("Visual search failed", "error");
+    }
   }
 
   return (
