@@ -2658,7 +2658,7 @@ function HomePageContent() {
     e.currentTarget.value = "";
 
     try {
-      mobileToast.show("Analyzing image…", "info");
+      mobileToast.show("📸 Looking up your product…", "info");
       const base64 = await resizeImage(file);
       setSelectedImage(base64);
 
@@ -2671,14 +2671,14 @@ function HomePageContent() {
       const data = await res.json();
 
       if (res.ok && data.searchTerm) {
-        mobileToast.show(`Found: ${data.searchTerm}`, "success");
+        mobileToast.show(`✨ Searching for "${data.searchTerm}"`, "success");
         router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}`);
       } else {
-        mobileToast.show(data.error || "Could not identify product", "error");
+        mobileToast.show("Try a clearer photo or search by name", "info");
       }
     } catch (err) {
       console.error("Visual search error:", err);
-      mobileToast.show("Visual search failed", "error");
+      mobileToast.show("Try again or search by name", "info");
     }
   }
 

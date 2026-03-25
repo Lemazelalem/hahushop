@@ -196,9 +196,11 @@ function DeliveryBadge() {
 
 function CameraToast({
   visible,
+  message,
   onClose,
 }: {
   visible: boolean;
+  message?: string;
   onClose: () => void;
 }) {
   if (!visible) return null;
@@ -206,7 +208,7 @@ function CameraToast({
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl shadow-black/30 animate-in slide-in-from-bottom-4 duration-300">
       <Camera className="w-4 h-4 text-blue-400 animate-pulse" />
-      <span>Analyzing image…</span>
+      <span>{message || "📸 Looking up your product…"}</span>
       <button
         type="button"
         onClick={onClose}
@@ -536,6 +538,7 @@ function ShopPageContent() {
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [cameraToastVisible, setCameraToastVisible] = useState(false);
+  const [cameraToastMsg, setCameraToastMsg] = useState<string | undefined>();
 
   const initialCategory = useMemo(() => {
     return (searchParams.get("category") || "").toLowerCase();
@@ -825,6 +828,7 @@ function ShopPageContent() {
       if (!file) return;
       e.target.value = "";
 
+      setCameraToastMsg(undefined);
       setCameraToastVisible(true);
 
       try {
@@ -835,14 +839,19 @@ function ShopPageContent() {
           body: JSON.stringify({ image: base64 }),
         });
         const data = await res.json();
-        setCameraToastVisible(false);
 
         if (res.ok && data.searchTerm) {
+          setCameraToastMsg(`✨ Searching for "${data.searchTerm}"`);
           setFilters((prev) => ({ ...prev, search: data.searchTerm, category: "" }));
           setMobileCategory("All");
+          setTimeout(() => setCameraToastVisible(false), 1800);
+        } else {
+          setCameraToastMsg("Try a clearer photo or search by name");
+          setTimeout(() => setCameraToastVisible(false), 2200);
         }
       } catch {
-        setCameraToastVisible(false);
+        setCameraToastMsg("Try again or search by name");
+        setTimeout(() => setCameraToastVisible(false), 2200);
       }
     },
     []
@@ -873,6 +882,7 @@ function ShopPageContent() {
     <main className="min-h-screen bg-slate-100 md:bg-slate-50">
       <CameraToast
         visible={cameraToastVisible}
+        message={cameraToastMsg}
         onClose={() => setCameraToastVisible(false)}
       />
 
