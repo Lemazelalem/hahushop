@@ -435,7 +435,7 @@ export default function ProductDetailPage() {
           ) : (
             <div className="grid md:grid-cols-2 gap-0">
               <div className="pb-4 md:p-8 md:bg-slate-50">
-                <div className="aspect-square bg-white rounded-[28px] border border-slate-200 overflow-hidden flex items-center justify-center md:rounded-2xl">
+                <div className="aspect-square overflow-hidden flex items-center justify-center bg-white md:rounded-2xl md:border md:border-slate-200">
                   {product.image_url ? (
                     <img
                       src={product.image_url}
@@ -498,7 +498,7 @@ export default function ProductDetailPage() {
                 <div className="border-b border-slate-100 pb-5 md:bg-slate-50 md:rounded-xl md:border md:border-slate-100 md:p-4 md:pb-4">
                   <div className="text-xs md:text-sm text-slate-500 mb-1">Unit price</div>
                   <div className="flex items-baseline gap-3">
-                    <span className="text-[26px] md:text-3xl font-black text-slate-900">
+                    <span className="text-[22px] md:text-3xl font-bold md:font-black text-slate-900">
                       {displayPrice}
                     </span>
                     {originalPrice && (
