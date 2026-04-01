@@ -32,6 +32,11 @@ type RatingStats = {
   myRating: number | null;
 };
 
+const BLACK = "#111827";
+const ACCENT = "#FF0255";
+const SURFACE = "#ffffff";
+const BORDER = "#e2e8f0";
+
 function money(cents: number | null | undefined) {
   if (!cents || cents <= 0) return "-";
   return `ETB ${(cents / 100).toLocaleString("en-US", {
@@ -554,7 +559,7 @@ export default function ProductDetailPage() {
                 </div>
 
                 {/* Purchase actions belong on product details page */}
-                <div className="flex gap-3 flex-wrap">
+                <div className="hidden md:flex gap-3 flex-wrap">
                   <button
                     onClick={(e) => handleAddToCart(e)}
                     disabled={addedToCart}
@@ -642,9 +647,13 @@ export default function ProductDetailPage() {
           className="md:hidden fixed inset-x-0 z-[100] px-3"
           style={{ bottom: "max(12px, calc(env(safe-area-inset-bottom) + 8px))" }}
         >
-          <div className="rounded-[28px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+          <div className="rounded-[28px] border bg-white/95 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
+            style={{ borderColor: BORDER }}>
             <div className="mb-2.5 flex items-center justify-between gap-2 px-1 text-xs text-slate-500">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+              <span
+                className="rounded-full px-2.5 py-1 font-medium"
+                style={{ background: "#f8fafc", color: BLACK }}
+              >
                 {selectedQty} item{selectedQty === 1 ? "" : "s"}{" \u2022 "}{totalPrice}
               </span>
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
@@ -652,15 +661,17 @@ export default function ProductDetailPage() {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={(e) => handleAddToCart(e)}
                 disabled={addedToCart}
-                className={[
-                  "flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-white transition-all",
-                  addedToCart ? "bg-emerald-500" : "bg-blue-600 active:scale-[0.98]",
-                ].join(" ")}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-bold transition-all active:scale-[0.98]"
+                style={{
+                  background: addedToCart ? BLACK : SURFACE,
+                  color: addedToCart ? "#fff" : BLACK,
+                  border: `1.5px solid ${addedToCart ? BLACK : BORDER}`,
+                }}
               >
                 {addedToCart ? (
                   <>
@@ -678,9 +689,13 @@ export default function ProductDetailPage() {
               <button
                 type="button"
                 onClick={(e) => handleShopNow(e)}
-                className="flex-1 inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-bold text-white active:scale-[0.98]"
+                className="flex-1 inline-flex items-center justify-center rounded-full px-4 py-3.5 text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{
+                  background: ACCENT,
+                  boxShadow: "0 12px 24px rgba(255,2,85,0.24)",
+                }}
               >
-                Shop Now
+                Buy Now
               </button>
             </div>
 
