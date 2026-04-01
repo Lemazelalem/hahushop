@@ -478,14 +478,14 @@ export default function ProductDetailPage() {
                   <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 mb-3">
                     {categoryLabel}
                   </div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
+                  <h1 className="text-[18px] md:text-3xl font-bold text-slate-900 leading-tight">
                     {product.name}
                   </h1>
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
                   <StarsRow value={ratingStats.avg || 0} size="md" />
-                  <span className="text-sm text-slate-600">
+                  <span className="text-[13px] md:text-sm text-slate-600">
                     {ratingLoading ? "Loading ratings..." : avgLabel}
                     {ratingStats.count > 0 && (
                       <span className="ml-1">
@@ -496,9 +496,9 @@ export default function ProductDetailPage() {
                 </div>
 
                 <div className="border-b border-slate-100 pb-5 md:bg-slate-50 md:rounded-xl md:border md:border-slate-100 md:p-4 md:pb-4">
-                  <div className="text-sm text-slate-500 mb-1">Unit price</div>
+                  <div className="text-xs md:text-sm text-slate-500 mb-1">Unit price</div>
                   <div className="flex items-baseline gap-3">
-                    <span className="text-3xl font-black text-slate-900">
+                    <span className="text-[26px] md:text-3xl font-black text-slate-900">
                       {displayPrice}
                     </span>
                     {originalPrice && (
@@ -519,7 +519,7 @@ export default function ProductDetailPage() {
                   )}
 
                   <div className="mt-4 pt-4 border-t border-slate-200/80">
-                    <div className="text-sm text-slate-500 mb-2">Quantity</div>
+                    <div className="text-xs md:text-sm text-slate-500 mb-2">Quantity</div>
 
                     <div className="flex items-center gap-3">
                       <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -551,7 +551,7 @@ export default function ProductDetailPage() {
                         </button>
                       </div>
 
-                      <div className="text-sm text-slate-600">
+                      <div className="text-[13px] md:text-sm text-slate-600">
                         Total: <span className="font-bold text-slate-900">{totalPrice}</span>
                       </div>
                     </div>
@@ -604,22 +604,22 @@ export default function ProductDetailPage() {
                 )}
 
                 <div className="pt-1">
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">
+                  <h3 className="text-[13px] md:text-sm font-bold text-slate-900 mb-2">
                     Description
                   </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                  <p className="text-[13px] md:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
                     {product.description || "No description available for this product."}
                   </p>
                 </div>
 
                 <div className="border-t border-slate-100 pt-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-3">
+                  <h3 className="text-[13px] md:text-sm font-bold text-slate-900 mb-3">
                     Rate this product
                   </h3>
 
                   {userId ? (
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-sm text-slate-600">Your rating:</span>
+                      <span className="text-[13px] md:text-sm text-slate-600">Your rating:</span>
                       <StarsRow
                         value={ratingStats.myRating || 0}
                         onChange={handleRate}
@@ -630,7 +630,7 @@ export default function ProductDetailPage() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-[13px] md:text-sm text-slate-500">
                       Sign in to rate this product.
                     </p>
                   )}
