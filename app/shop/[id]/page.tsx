@@ -401,8 +401,8 @@ export default function ProductDetailPage() {
   const categoryLabel = product?.category?.name?.trim() || "Uncategorized";
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 pb-40 md:pb-6">
+    <main className="min-h-screen bg-white md:bg-slate-50">
+      <div className="max-w-6xl mx-auto px-4 py-4 md:px-8 md:py-6 pb-32 md:pb-6">
         <div className="mb-6">
           <button
             type="button"
@@ -420,7 +420,7 @@ export default function ProductDetailPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-hidden md:bg-white md:rounded-2xl md:shadow-sm md:border md:border-slate-200">
           {loading || !product ? (
             <div className="p-8 animate-pulse">
               <div className="grid gap-8 md:grid-cols-2">
@@ -434,8 +434,8 @@ export default function ProductDetailPage() {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-0">
-              <div className="p-6 md:p-8 bg-slate-50">
-                <div className="aspect-square bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
+              <div className="pb-4 md:p-8 md:bg-slate-50">
+                <div className="aspect-square bg-white rounded-[28px] border border-slate-200 overflow-hidden flex items-center justify-center md:rounded-2xl">
                   {product.image_url ? (
                     <img
                       src={product.image_url}
@@ -473,7 +473,7 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              <div className="p-6 md:p-8 space-y-6">
+              <div className="px-1 pt-5 pb-4 md:p-8 space-y-5 md:space-y-6">
                 <div>
                   <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 mb-3">
                     {categoryLabel}
@@ -495,7 +495,7 @@ export default function ProductDetailPage() {
                   </span>
                 </div>
 
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <div className="border-b border-slate-100 pb-5 md:bg-slate-50 md:rounded-xl md:border md:border-slate-100 md:p-4 md:pb-4">
                   <div className="text-sm text-slate-500 mb-1">Unit price</div>
                   <div className="flex items-baseline gap-3">
                     <span className="text-3xl font-black text-slate-900">
@@ -518,7 +518,7 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
-                  <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="mt-4 pt-4 border-t border-slate-200/80">
                     <div className="text-sm text-slate-500 mb-2">Quantity</div>
 
                     <div className="flex items-center gap-3">
@@ -603,7 +603,7 @@ export default function ProductDetailPage() {
                   </button>
                 )}
 
-                <div>
+                <div className="pt-1">
                   <h3 className="text-sm font-bold text-slate-900 mb-2">
                     Description
                   </h3>
@@ -644,12 +644,10 @@ export default function ProductDetailPage() {
       {/* Mobile sticky purchase bar */}
       {!loading && product && (
         <div
-          className="md:hidden fixed inset-x-0 z-[100] px-3"
-          style={{ bottom: "max(12px, calc(env(safe-area-inset-bottom) + 8px))" }}
+          className="md:hidden fixed inset-x-0 bottom-0 z-[100] border-t border-slate-200 bg-white/98 backdrop-blur-xl"
         >
-          <div className="rounded-[28px] border bg-white/95 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl"
-            style={{ borderColor: BORDER }}>
-            <div className="mb-2.5 flex items-center justify-between gap-2 px-1 text-xs text-slate-500">
+          <div className="mx-auto max-w-6xl px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+            <div className="mb-2.5 flex items-center justify-between gap-2 text-xs text-slate-500">
               <span
                 className="rounded-full px-2.5 py-1 font-medium"
                 style={{ background: "#f8fafc", color: BLACK }}
@@ -666,7 +664,7 @@ export default function ProductDetailPage() {
                 type="button"
                 onClick={(e) => handleAddToCart(e)}
                 disabled={addedToCart}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-bold transition-all active:scale-[0.98]"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-bold shadow-[0_6px_16px_rgba(15,23,42,0.08)] transition-all active:scale-[0.98]"
                 style={{
                   background: addedToCart ? BLACK : SURFACE,
                   color: addedToCart ? "#fff" : BLACK,
@@ -698,7 +696,6 @@ export default function ProductDetailPage() {
                 Buy Now
               </button>
             </div>
-
           </div>
         </div>
       )}

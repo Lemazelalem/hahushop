@@ -75,6 +75,34 @@ type PageView =
   | "rejected"
   | "approved";
 
+type BusinessLandingFactKey =
+  | "activeOrganizations"
+  | "creditIssued"
+  | "officeDelivery"
+  | "avgApprovalTime";
+
+type BusinessLandingFactItem = {
+  orgName: string;
+  orgType: string | null;
+  status: "pending" | "approved";
+  paymentTerms: "net_30" | "net_60" | null;
+  approvedCreditLimitCents: number | null;
+  approvalHours: number | null;
+  createdAt: string | null;
+  reviewedAt: string | null;
+};
+
+type BusinessLandingFacts = {
+  activeOrganizationsCount: number;
+  approvedCreditCents: number;
+  officeDeliveryCount: number;
+  avgApprovalHours: number | null;
+  activeOrganizations: BusinessLandingFactItem[];
+  creditOrganizations: BusinessLandingFactItem[];
+  deliveryOrganizations: BusinessLandingFactItem[];
+  approvalOrganizations: BusinessLandingFactItem[];
+};
+
 /* ══════════════════════════════════════════════════════════════════════════════
    CONSTANTS
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -151,12 +179,23 @@ const HOW_IT_WORKS = [
   },
 ];
 
-const STATS = [
-  { value: "340+", label: "Active Organizations", accent: "#818cf8" },
-  { value: "ETB 2.1B", label: "Credit Issued", accent: "#34d399" },
-  { value: "1–3 Days", label: "Office Delivery", accent: "#38bdf8" },
-  { value: "48h", label: "Avg. Approval Time", accent: "#a78bfa" },
-];
+const FACT_ACCENTS: Record<BusinessLandingFactKey, string> = {
+  activeOrganizations: "#818cf8",
+  creditIssued: "#34d399",
+  officeDelivery: "#38bdf8",
+  avgApprovalTime: "#a78bfa",
+};
+
+const EMPTY_LANDING_FACTS: BusinessLandingFacts = {
+  activeOrganizationsCount: 0,
+  approvedCreditCents: 0,
+  officeDeliveryCount: 0,
+  avgApprovalHours: null,
+  activeOrganizations: [],
+  creditOrganizations: [],
+  deliveryOrganizations: [],
+  approvalOrganizations: [],
+};
 
 const HERO_STYLES = `
   .hero-sans {
@@ -322,17 +361,35 @@ const HERO_STYLES = `
   }
 
   .hero-stat-card {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
     background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.04));
     border: 1px solid rgba(255,255,255,0.10);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 18px;
     padding: 16px 18px 14px;
-    min-height: 122px;
+    min-height: 138px;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.04),
       0 12px 30px rgba(2,6,23,0.16);
-    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .hero-stat-card.is-active {
+    transform: translateY(-2px);
+    border-color: rgba(125,211,252,0.30);
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 18px 40px rgba(2,6,23,0.24);
+  }
+
+  .hero-stat-card:focus-visible {
+    outline: 2px solid rgba(125,211,252,0.65);
+    outline-offset: 2px;
   }
 
   .hero-stat-card:hover {
@@ -380,14 +437,189 @@ function money(cents: number | null | undefined): string {
 function formatTerms(t: "net_30" | "net_60" | null | undefined): string {
   if (t === "net_30") return "Net-30";
   if (t === "net_60") return "Net-60";
-  return "—";
+  return "?";
+}
+
+function moneyCompact(cents: number | null | undefined): string {
+  const safe = typeof cents === "number" && cents > 0 ? cents : 0;
+  const etb = safe / 100;
+
+  if (etb >= 1000000000) return `ETB ${(etb / 1000000000).toFixed(1)}B`;
+  if (etb >= 1000000) return `ETB ${(etb / 1000000).toFixed(1)}M`;
+  if (etb >= 1000) return `ETB ${(etb / 1000).toFixed(0)}K`;
+
+  return `ETB ${etb.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+function formatApprovalTime(hours: number | null | undefined): string {
+  if (typeof hours !== "number" || Number.isNaN(hours) || hours <= 0) return "N/A";
+  if (hours >= 72) return `${(hours / 24).toFixed(hours % 24 === 0 ? 0 : 1)}d`;
+  return `${Math.round(hours)}h`;
+}
+
+function formatOfficeReach(count: number): string {
+  const safe = Math.max(0, Math.round(count));
+  if (safe === 1) return "1 Office";
+  return `${safe.toLocaleString("en-US")} Offices`;
+}
+
+function shortDate(value: string | null | undefined): string {
+  if (!value) return "Recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeLandingFactItem(value: unknown): BusinessLandingFactItem | null {
+  if (!value || typeof value !== "object") return null;
+
+  const row = value as Record<string, unknown>;
+  const orgName = typeof row.orgName === "string" ? row.orgName.trim() : "";
+  if (!orgName) return null;
+
+  const status = row.status === "approved" ? "approved" : "pending";
+  const paymentTerms = row.paymentTerms === "net_30" || row.paymentTerms === "net_60"
+    ? row.paymentTerms
+    : null;
+
+  return {
+    orgName,
+    orgType: typeof row.orgType === "string" && row.orgType.trim() ? row.orgType.trim() : null,
+    status,
+    paymentTerms,
+    approvedCreditLimitCents: coerceNumber(row.approvedCreditLimitCents),
+    approvalHours: coerceNumber(row.approvalHours),
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : null,
+    reviewedAt: typeof row.reviewedAt === "string" ? row.reviewedAt : null,
+  };
+}
+
+function normalizeLandingFacts(value: unknown): BusinessLandingFacts {
+  if (!value || typeof value !== "object") return EMPTY_LANDING_FACTS;
+
+  const row = value as Record<string, unknown>;
+  const list = (input: unknown) =>
+    Array.isArray(input)
+      ? input
+          .map(normalizeLandingFactItem)
+          .filter((item): item is BusinessLandingFactItem => item !== null)
+      : [];
+
+  return {
+    activeOrganizationsCount: coerceNumber(row.activeOrganizationsCount) ?? 0,
+    approvedCreditCents: coerceNumber(row.approvedCreditCents) ?? 0,
+    officeDeliveryCount: coerceNumber(row.officeDeliveryCount) ?? 0,
+    avgApprovalHours: coerceNumber(row.avgApprovalHours),
+    activeOrganizations: list(row.activeOrganizations),
+    creditOrganizations: list(row.creditOrganizations),
+    deliveryOrganizations: list(row.deliveryOrganizations),
+    approvalOrganizations: list(row.approvalOrganizations),
+  };
+}
+
+function factHighlights(
+  factKey: BusinessLandingFactKey,
+  item: BusinessLandingFactItem
+): string[] {
+  if (factKey === "creditIssued") {
+    return [
+      item.approvedCreditLimitCents ? moneyCompact(item.approvedCreditLimitCents) : "Credit under review",
+      item.paymentTerms ? formatTerms(item.paymentTerms) : "Terms pending",
+    ];
+  }
+
+  if (factKey === "officeDelivery") {
+    return [
+      item.status === "approved" ? "Delivery-ready account" : "Address received",
+      item.paymentTerms ? formatTerms(item.paymentTerms) : "Terms pending",
+    ];
+  }
+
+  if (factKey === "avgApprovalTime") {
+    return [
+      item.approvalHours ? `Approved in ${formatApprovalTime(item.approvalHours)}` : "Approval timing pending",
+      item.reviewedAt ? `Reviewed ${shortDate(item.reviewedAt)}` : `Applied ${shortDate(item.createdAt)}`,
+    ];
+  }
+
+  return [
+    item.status === "approved" ? "Approved organization" : "Onboarding organization",
+    item.paymentTerms ? formatTerms(item.paymentTerms) : "Terms pending",
+  ];
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    LANDING PAGE
 ══════════════════════════════════════════════════════════════════════════════ */
 
-function LandingPage({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn: boolean }) {
+function LandingPage({
+  onApply,
+  isLoggedIn,
+  landingFacts,
+  landingFactsLoading,
+}: {
+  onApply: () => void;
+  isLoggedIn: boolean;
+  landingFacts: BusinessLandingFacts | null;
+  landingFactsLoading: boolean;
+}) {
+  const [activeFact, setActiveFact] = useState<BusinessLandingFactKey>("activeOrganizations");
+  const facts = landingFacts ?? EMPTY_LANDING_FACTS;
+
+  const factCards = [
+    {
+      key: "activeOrganizations" as const,
+      value: landingFactsLoading ? "..." : facts.activeOrganizationsCount.toLocaleString("en-US"),
+      label: "Active Organizations",
+      accent: FACT_ACCENTS.activeOrganizations,
+      helper: "Approved and onboarding accounts",
+      items: facts.activeOrganizations,
+      panelTitle: "Organizations currently using Hahu Business",
+      panelBody: "Real organization names behind the headline count, including approved accounts and organizations actively onboarding.",
+    },
+    {
+      key: "creditIssued" as const,
+      value: landingFactsLoading ? "..." : moneyCompact(facts.approvedCreditCents),
+      label: "Credit Issued",
+      accent: FACT_ACCENTS.creditIssued,
+      helper: "Approved buying power across live accounts",
+      items: facts.creditOrganizations,
+      panelTitle: "Approved credit lines by organization",
+      panelBody: "This total is calculated from approved business credit limits, so visitors can see the actual buying power already activated.",
+    },
+    {
+      key: "officeDelivery" as const,
+      value: landingFactsLoading ? "..." : formatOfficeReach(facts.officeDeliveryCount),
+      label: "Office Delivery",
+      accent: FACT_ACCENTS.officeDelivery,
+      helper: "Organizations with delivery-ready office accounts",
+      items: facts.deliveryOrganizations,
+      panelTitle: "Organizations ready for office delivery",
+      panelBody: "These organizations already have office delivery details on file, which makes the 1-3 day promise feel concrete and operational.",
+    },
+    {
+      key: "avgApprovalTime" as const,
+      value: landingFactsLoading ? "..." : formatApprovalTime(facts.avgApprovalHours),
+      label: "Avg. Approval Time",
+      accent: FACT_ACCENTS.avgApprovalTime,
+      helper: "Average turnaround from submission to approval",
+      items: facts.approvalOrganizations,
+      panelTitle: "Recent approvals and review turnaround",
+      panelBody: "A live look at recently approved organizations, ordered by how quickly their application moved through review.",
+    },
+  ];
+
+  const selectedFact = factCards.find((card) => card.key === activeFact) ?? factCards[0];
+
   return (
     <div className="bg-white">
       <style>{HERO_STYLES}</style>
@@ -477,7 +709,7 @@ function LandingPage({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn:
 
             <div className="hero-actions hero-fade-up hero-delay-3">
               <button onClick={onApply} className="hero-btn-primary hero-sans">
-                {isLoggedIn ? "Apply for Business Account" : "Get Started — It's Free"}
+                {isLoggedIn ? "Apply for Business Account" : "Get Started — It&apos;s Free"}
                 <ArrowRight style={{ width: 15, height: 15 }} />
               </button>
               <Link href="/shop" className="hero-btn-ghost hero-sans">
@@ -487,18 +719,109 @@ function LandingPage({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn:
           </div>
 
           <div className="hero-stats-wrap hero-fade-up hero-delay-4">
-            <div className="hero-stats-grid">
-              {STATS.map((s) => (
-                <div key={s.label} className="hero-stat-card hero-sans">
-                  <div className="hero-stat-value">{s.value}</div>
-                  <div className="hero-stat-label">{s.label}</div>
-                  <div
-                    className="hero-stat-line"
-                    style={{ background: `linear-gradient(90deg, ${s.accent}, transparent)` }}
-                  />
-                </div>
-              ))}
+            <div className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+              Click a fact to inspect the organizations behind it
             </div>
+            <div className="hero-stats-grid">
+              {factCards.map((card) => {
+                const isActive = card.key === activeFact;
+
+                return (
+                  <button
+                    type="button"
+                    key={card.key}
+                    onClick={() => setActiveFact(card.key)}
+                    aria-pressed={isActive}
+                    className={`hero-stat-card hero-sans ${isActive ? "is-active" : ""}`}
+                  >
+                    <div className="hero-stat-value">{card.value}</div>
+                    <div className="hero-stat-label">{card.label}</div>
+                    <div className="mb-4 text-[11px] font-medium text-slate-300/55">
+                      {card.helper}
+                    </div>
+                    <div
+                      className="hero-stat-line"
+                      style={{ background: `linear-gradient(90deg, ${card.accent}, transparent)` }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="relative mx-auto max-w-6xl px-5 pb-8 sm:px-6 lg:px-8">
+          <div className="rounded-[28px] border border-white/10 bg-slate-950/20 p-4 shadow-[0_20px_50px_rgba(2,6,23,0.26)] backdrop-blur-xl md:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/80">
+                  <span className="h-2 w-2 rounded-full" style={{ background: selectedFact.accent }} />
+                  Live Organization Roster
+                </div>
+                <h3 className="mt-3 text-lg font-semibold text-white md:text-xl">{selectedFact.panelTitle}</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-300/70">{selectedFact.panelBody}</p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Organizations shown</div>
+                <div className="mt-1 text-2xl font-semibold text-white">{selectedFact.items.length}</div>
+              </div>
+            </div>
+
+            {landingFactsLoading ? (
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-[108px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]"
+                  />
+                ))}
+              </div>
+            ) : selectedFact.items.length === 0 ? (
+              <div className="mt-5 rounded-2xl border border-dashed border-white/12 bg-white/[0.03] px-4 py-6 text-sm text-slate-300/70">
+                Live organization details will appear here as soon as approved Hahu Business applications are available.
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {selectedFact.items.map((item) => {
+                  const badges = factHighlights(selectedFact.key, item);
+                  const statusClasses =
+                    item.status === "approved"
+                      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                      : "border-amber-400/20 bg-amber-400/10 text-amber-200";
+
+                  return (
+                    <div
+                      key={`${selectedFact.key}-${item.orgName}`}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-white">{item.orgName}</div>
+                          <div className="mt-1 text-xs text-slate-300/65">
+                            {item.orgType || "Organization"}
+                          </div>
+                        </div>
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses}`}>
+                          {item.status === "approved" ? "Approved" : "Onboarding"}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {badges.map((badge, idx) => (
+                          <span
+                            key={`${item.orgName}-${selectedFact.key}-${idx}`}
+                            className="rounded-full border border-white/10 bg-slate-950/25 px-2.5 py-1 text-[11px] font-medium text-slate-200/85"
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -603,7 +926,7 @@ function LandingPage({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn:
       <section className="py-20 px-6 bg-slate-50">
         <div className="max-w-4xl mx-auto text-center">
           <p className="text-xs font-semibold tracking-[0.2em] uppercase text-slate-500 mb-3">
-            Who It's For
+            Who It&apos;s For
           </p>
           <h2 className="text-3xl font-bold text-slate-900 mb-12">
             Any recognized organization
@@ -635,7 +958,7 @@ function LandingPage({ onApply, isLoggedIn }: { onApply: () => void; isLoggedIn:
             onClick={onApply}
             className="inline-flex items-center gap-2 font-semibold text-slate-900 px-10 py-4 rounded-lg bg-white hover:bg-slate-100 transition-all hover:shadow-lg hover:shadow-white/10"
           >
-            Apply Now — It's Free
+            Apply Now — It&apos;s Free
             <ArrowRight className="w-4 h-4" />
           </button>
           <p className="text-sm text-slate-500 mt-8">
@@ -735,9 +1058,9 @@ function ApplicationForm({
 
       if (insertError) throw new Error(insertError.message);
       onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[business apply] error:", err);
-      setSubmitError(err?.message ?? "Submission failed. Please try again.");
+      setSubmitError(err instanceof Error ? err.message : "Submission failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -1300,8 +1623,8 @@ function ApprovedDashboard({
       setEditingAddress(false);
       setAddressSaved(true);
       setTimeout(() => setAddressSaved(false), 3000);
-    } catch (err: any) {
-      setAddressError(err?.message ?? "Failed to save. Please try again.");
+    } catch (err: unknown) {
+      setAddressError(err instanceof Error ? err.message : "Failed to save. Please try again.");
     } finally {
       setSavingAddress(false);
     }
@@ -1566,7 +1889,38 @@ export default function BusinessPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [application, setApplication] = useState<BusinessApplication | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [landingFacts, setLandingFacts] = useState<BusinessLandingFacts | null>(null);
+  const [landingFactsLoading, setLandingFactsLoading] = useState(true);
 
+  useEffect(() => {
+    let alive = true;
+
+    async function loadLandingFacts() {
+      try {
+        const { data, error } = await supabase.rpc("get_business_landing_facts");
+        if (!alive) return;
+
+        if (error) {
+          console.error("[business landing facts] error:", error);
+          setLandingFacts(null);
+          return;
+        }
+
+        setLandingFacts(normalizeLandingFacts(data));
+      } catch (err) {
+        console.error("[business landing facts] unexpected error:", err);
+        if (alive) setLandingFacts(null);
+      } finally {
+        if (alive) setLandingFactsLoading(false);
+      }
+    }
+
+    loadLandingFacts();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
 
@@ -1728,5 +2082,12 @@ export default function BusinessPage() {
     return <ApprovedDashboard application={application} businessProfile={businessProfile} />;
   }
 
-  return <LandingPage onApply={handleApplyCTA} isLoggedIn={isLoggedIn} />;
+  return (
+    <LandingPage
+      onApply={handleApplyCTA}
+      isLoggedIn={isLoggedIn}
+      landingFacts={landingFacts}
+      landingFactsLoading={landingFactsLoading}
+    />
+  );
 }
