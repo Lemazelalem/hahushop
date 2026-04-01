@@ -4,9 +4,15 @@
 import { FormEvent, Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  getProfileRoleWithTimeout,
+  getRoleHintFromUser,
+  syncProfileFromAuthUser,
+  type AppRole,
+} from "@/lib/authProfile";
 
 type ProfileRow = {
-  role: "admin" | "seller" | "customer" | null;
+  role: AppRole;
 };
 
 function LoginPageContent() {
@@ -25,6 +31,16 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  function finishLogin(path: string) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("shopease_is_logged_in", "1");
+    }
+
+    setLoading(false);
+    router.replace(path);
+    router.refresh();
+  }
 
   useEffect(() => {
     if (error) setError(null);
@@ -48,24 +64,16 @@ function LoginPageContent() {
     return Object.keys(errors).length === 0;
   };
 
-  function redirectByRole(role: ProfileRow["role"]) {
+  function defaultPathForRole(
+    profileRole: ProfileRow["role"],
+    roleHint: ProfileRow["role"]
+  ) {
     // 🔒 If a returnUrl or redirect was passed, always go there after login
-    if (redirectTo) {
-      router.push(redirectTo);
-      return;
-    }
+    if (profileRole === "admin") return "/admin";
+    if (profileRole === "seller") return "/seller";
+    if (roleHint === "seller") return "/seller/verification";
+    return "/";
 
-    const routes: Record<NonNullable<ProfileRow["role"]>, string> = {
-      admin: "/admin",
-      seller: "/seller",
-      customer: "/",
-    };
-
-    if (role && routes[role]) {
-      router.push(routes[role]);
-    } else {
-      router.push("/");
-    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -98,44 +106,52 @@ function LoginPageContent() {
         return;
       }
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      const user = signInData.user ?? signInData.session?.user ?? null;
 
-      console.log("[LOGIN] session after sign-in:", { session, sessionError });
-
-      const user = session?.user ?? null;
-
-      if (sessionError || !user) {
-        console.error("Error fetching user/session:", sessionError);
+      if (!user) {
         setError("Could not load your session. Please try again.");
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
+      const roleHint = getRoleHintFromUser(user);
 
-      if (profileError) {
-        console.error("Error fetching profile:", profileError);
-        setError("Could not load your profile. Redirecting...");
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("shopease_is_logged_in", "1");
-        }
-        redirectByRole(null);
+      void syncProfileFromAuthUser(supabase, user, roleHint).catch((profileErr) => {
+        console.error("[LOGIN] profile bootstrap failed:", profileErr);
+      });
+
+      if (redirectTo && redirectTo !== "/seller" && redirectTo !== "/admin") {
+        finishLogin(redirectTo);
         return;
       }
 
-      const role = (profile?.role ?? null) as ProfileRow["role"];
+      const profileRole = await getProfileRoleWithTimeout(supabase, user.id);
 
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("shopease_is_logged_in", "1");
+      if (redirectTo === "/admin") {
+        if (profileRole !== "admin") {
+          setError("Your account does not have admin access.");
+          return;
+        }
+
+        finishLogin("/admin");
+        return;
       }
 
-      redirectByRole(role);
+      if (redirectTo === "/seller") {
+        if (profileRole === "seller") {
+          finishLogin("/seller");
+          return;
+        }
+
+        if (roleHint === "seller") {
+          finishLogin("/seller/verification");
+          return;
+        }
+
+        finishLogin("/");
+        return;
+      }
+
+      finishLogin(defaultPathForRole(profileRole, roleHint));
     } catch (err) {
       console.error("Unexpected login error:", err);
       setError("An unexpected error occurred. Please try again later.");

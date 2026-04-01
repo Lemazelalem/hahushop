@@ -10,6 +10,11 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  getProfileRoleWithTimeout,
+  getRoleHintFromUser,
+  syncProfileFromAuthUser,
+} from "@/lib/authProfile";
 
 type SellerDocumentStatus = "pending" | "approved" | "rejected";
 
@@ -23,11 +28,6 @@ type SellerDocumentRow = {
   created_at: string;
   reviewed_at: string | null;
   reviewed_by: string | null;
-};
-
-type ProfileRow = {
-  id: string;
-  role: string | null;
 };
 
 type FilterKey = "all" | SellerDocumentStatus;
@@ -147,20 +147,16 @@ export default function SellerVerificationPage() {
       setUserId(user.id);
 
       // 2) Load profile role (verification must be accessible BEFORE seller approval)
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id,role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error(profileError);
-        setPageError(profileError.message || "Could not load your profile.");
-        return;
-      }
-
-      const nextRole = ((profile as ProfileRow | null)?.role ?? null) as any;
+      const roleHint = getRoleHintFromUser(user);
+      const nextRole = await getProfileRoleWithTimeout(supabase, user.id);
       setRole(nextRole);
+
+      if (!nextRole && roleHint) {
+        setRole(roleHint);
+        void syncProfileFromAuthUser(supabase, user, roleHint).catch((profileErr) => {
+          console.error("[seller/verification] profile bootstrap failed:", profileErr);
+        });
+      }
 
       // 3) Load existing seller documents (for this user)
       const { data, error } = await supabase

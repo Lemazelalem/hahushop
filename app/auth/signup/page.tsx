@@ -4,6 +4,7 @@
 import { FormEvent, Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { syncProfileFromAuthUser } from "@/lib/authProfile";
 import { Store, User, ArrowLeft, CheckCircle } from "lucide-react";
 
 type SignupRole = "customer" | "seller";
@@ -32,6 +33,16 @@ function SignupPageContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  function finishSignedInSignup(path: string) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("shopease_is_logged_in", "1");
+    }
+
+    setLoading(false);
+    router.replace(path);
+    router.refresh();
+  }
 
   // FIX: removed error/message from deps — setting them inside the effect
   // caused an unnecessary re-run cycle on every render.
@@ -85,15 +96,20 @@ function SignupPageContent() {
     setLoading(true);
 
     try {
+      const email = formData.email.trim();
+      const displayName =
+        formData.displayName.trim() || formData.businessName.trim();
+      const businessName = formData.businessName.trim();
+
       // 1) Sign up user
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email.trim(),
+        email,
         password: formData.password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
-            display_name:
-              formData.displayName.trim() || formData.businessName.trim(),
+            display_name: displayName,
+            business_name: businessName || undefined,
             role: selectedRole,
           },
         },
@@ -107,8 +123,8 @@ function SignupPageContent() {
         return;
       }
 
-      const userId = data.user?.id;
-      if (!userId) {
+      const signedUpUser = data.user ?? data.session?.user ?? null;
+      if (!signedUpUser) {
         setError(
           "Account created but user ID not found. Please contact support."
         );
@@ -116,7 +132,8 @@ function SignupPageContent() {
       }
 
       // 2) Update profile row (assuming row exists via trigger)
-      const profileUpdate: Record<string, unknown> = {
+      if (data.session?.user) {
+        const profileUpdate: Record<string, unknown> = {
         display_name:
           formData.displayName.trim() || formData.businessName.trim(),
         role: selectedRole,
@@ -132,7 +149,7 @@ function SignupPageContent() {
       const { error: profileError } = await supabase
         .from("profiles")
         .update(profileUpdate)
-        .eq("id", userId);
+        .eq("id", signedUpUser.id);
 
       if (profileError) {
         console.error("Profile update error:", profileError);
@@ -144,7 +161,7 @@ function SignupPageContent() {
         const { error: sellerAppError } = await supabase
           .from("seller_applications")
           .insert({
-            user_id: userId,
+            user_id: signedUpUser.id,
             business_name: formData.businessName.trim(),
             status: "pending",
             applied_at: new Date().toISOString(),
@@ -156,7 +173,9 @@ function SignupPageContent() {
       }
 
       // 4) Success — move to verify step with the submitted email
-      setSignedUpEmail(formData.email.trim());
+      }
+
+      setSignedUpEmail(email);
       setFormData({
         email: "",
         password: "",
@@ -164,7 +183,27 @@ function SignupPageContent() {
         displayName: "",
         businessName: "",
       });
-      setStep("verify");
+
+      if (!data.session?.user) {
+        setStep("verify");
+        return;
+      }
+
+      try {
+        await syncProfileFromAuthUser(supabase, signedUpUser, selectedRole);
+      } catch (profileErr) {
+        console.error("[SIGNUP] profile bootstrap failed:", profileErr);
+      }
+
+      if (selectedRole === "seller") {
+        finishSignedInSignup("/seller/verification");
+        return;
+      }
+
+      finishSignedInSignup(
+        redirectTo && redirectTo !== "/seller" ? redirectTo : "/"
+      );
+      return;
     } catch (err) {
       console.error("Unexpected signup error:", err);
       setError("An unexpected error occurred. Please try again later.");
@@ -293,7 +332,7 @@ function SignupPageContent() {
               {signedUpEmail}
             </p>
             <p className="text-xs text-slate-500 mb-8">
-              Click the link in the email to verify your account before logging in. Check your spam folder if you don't see it.
+              Click the link in the email to verify your account before logging in. Check your spam folder if you do not see it.
             </p>
 
             <button

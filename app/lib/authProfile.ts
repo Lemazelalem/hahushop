@@ -1,0 +1,140 @@
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+
+export type AppRole = "admin" | "seller" | "customer" | null;
+
+type MaybeError = {
+  code?: string;
+  message?: string;
+};
+
+function trimString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function noRowError(error: MaybeError | null | undefined) {
+  return error?.code === "PGRST116";
+}
+
+function duplicateError(error: MaybeError | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "23505" || message.includes("duplicate");
+}
+
+function sellerBusinessName(user: User) {
+  return (
+    trimString(user.user_metadata?.business_name) ??
+    trimString(user.user_metadata?.display_name) ??
+    trimString(user.user_metadata?.full_name) ??
+    trimString(user.email) ??
+    "Seller"
+  );
+}
+
+export function normalizeAppRole(value: unknown): AppRole {
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "admin" ||
+    normalized === "seller" ||
+    normalized === "customer"
+  ) {
+    return normalized;
+  }
+
+  return null;
+}
+
+export function getRoleHintFromUser(user: User): AppRole {
+  return normalizeAppRole(user.user_metadata?.role);
+}
+
+export async function getProfileRoleWithTimeout(
+  supabase: SupabaseClient,
+  userId: string,
+  timeoutMs = 4000
+): Promise<AppRole> {
+  const rolePromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error && !noRowError(error)) {
+        console.error("[auth] profile lookup failed:", error);
+      }
+
+      return normalizeAppRole(data?.role);
+    } catch (error: unknown) {
+      console.error("[auth] profile lookup crashed:", error);
+      return null;
+    }
+  })();
+
+  const timeoutPromise = new Promise<AppRole>((resolve) => {
+    globalThis.setTimeout(() => resolve(null), timeoutMs);
+  });
+
+  return Promise.race([rolePromise, timeoutPromise]);
+}
+
+export async function syncProfileFromAuthUser(
+  supabase: SupabaseClient,
+  user: User,
+  fallbackRole?: AppRole
+): Promise<AppRole> {
+  const role = fallbackRole ?? getRoleHintFromUser(user);
+  const displayName =
+    trimString(user.user_metadata?.display_name) ??
+    trimString(user.user_metadata?.full_name);
+
+  const payload: Record<string, unknown> = {
+    id: user.id,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (displayName) {
+    payload.display_name = displayName;
+  }
+
+  if (role) {
+    payload.role = role;
+  }
+
+  if (role === "seller") {
+    payload.business_name = sellerBusinessName(user);
+    payload.seller_status = "pending";
+    payload.is_verified_seller = false;
+  }
+
+  if (Object.keys(payload).length > 2) {
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert(payload, { onConflict: "id" });
+
+    if (profileError) {
+      throw profileError;
+    }
+  }
+
+  if (role === "seller") {
+    const { error: sellerAppError } = await supabase
+      .from("seller_applications")
+      .insert({
+        user_id: user.id,
+        business_name: sellerBusinessName(user),
+        status: "pending",
+        applied_at: new Date().toISOString(),
+      });
+
+    if (sellerAppError && !duplicateError(sellerAppError)) {
+      throw sellerAppError;
+    }
+  }
+
+  return role;
+}
