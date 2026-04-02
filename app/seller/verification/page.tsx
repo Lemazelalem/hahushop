@@ -1,22 +1,26 @@
-// app/seller/verification/page.tsx
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
   type ChangeEvent,
   type FormEvent,
 } from "react";
+import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  getProfileRoleWithTimeout,
-  getRoleHintFromUser,
-  syncProfileFromAuthUser,
+  getProfileAccessStateWithTimeout,
+  type AppRole,
+  type SellerStatus,
 } from "@/lib/authProfile";
 
 type SellerDocumentStatus = "pending" | "approved" | "rejected";
+type DocumentType = "business_license" | "tax_id" | "id_card";
+type FilterKey = "all" | SellerDocumentStatus;
+type PageMode = "approved" | "pending" | "rejected" | "not_started";
 
 type SellerDocumentRow = {
   id: string;
@@ -30,14 +34,35 @@ type SellerDocumentRow = {
   reviewed_by: string | null;
 };
 
-type FilterKey = "all" | SellerDocumentStatus;
+type MaybeError = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+  error_description?: string;
+};
 
-const STORAGE_BUCKET = "seller_documents"; // must match your Supabase bucket name
+const STORAGE_BUCKET = "seller_documents";
+
+function normalizeDocumentStatus(value: unknown): SellerDocumentStatus | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+
+  if (
+    normalized === "pending" ||
+    normalized === "approved" ||
+    normalized === "rejected"
+  ) {
+    return normalized;
+  }
+
+  return null;
+}
 
 function humanDocumentType(docType: string) {
   return docType
     .split("_")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
 
@@ -48,17 +73,129 @@ function labelStatus(status: SellerDocumentStatus | string) {
   return status || "Unknown";
 }
 
-function prettyError(err: any) {
-  if (!err) return "Unknown error.";
-  if (typeof err === "string") return err;
-  if (err.message) return err.message;
-  if (err.error_description) return err.error_description;
-  if (err.details) return err.details;
-  if (err.hint) return err.hint;
+function prettyError(error: unknown) {
+  if (!error) return "Unknown error.";
+  if (typeof error === "string") return error;
+
+  const maybeError = error as MaybeError;
+  if (maybeError.message) return maybeError.message;
+  if (maybeError.error_description) return maybeError.error_description;
+  if (maybeError.details) return maybeError.details;
+  if (maybeError.hint) return maybeError.hint;
+
   try {
-    return JSON.stringify(err, null, 2);
+    return JSON.stringify(error, null, 2);
   } catch {
-    return String(err);
+    return String(error);
+  }
+}
+
+function businessNameForUser(user: User) {
+  const raw =
+    user.user_metadata?.business_name ||
+    user.user_metadata?.display_name ||
+    user.user_metadata?.full_name ||
+    user.email ||
+    "Seller";
+
+  return String(raw).trim() || "Seller";
+}
+
+function derivePageMode(
+  role: AppRole,
+  sellerStatus: SellerStatus,
+  docs: SellerDocumentRow[]
+): PageMode {
+  if (role === "seller" || sellerStatus === "approved") return "approved";
+  if (sellerStatus === "rejected") return "rejected";
+
+  const hasDocuments = docs.length > 0;
+  const hasPendingDocs = docs.some(
+    (doc) => normalizeDocumentStatus(doc.status) === "pending"
+  );
+
+  if (sellerStatus === "pending" || hasPendingDocs || hasDocuments) {
+    return "pending";
+  }
+
+  return "not_started";
+}
+
+async function ensureSellerApplicationForSubmission(
+  user: User,
+  sellerStatus: SellerStatus
+) {
+  if (sellerStatus === "approved") return;
+
+  const businessName = businessNameForUser(user);
+  const now = new Date().toISOString();
+
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({
+      seller_status: "pending",
+      business_name: businessName,
+      updated_at: now,
+    })
+    .eq("id", user.id);
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  const { data: existingApplication, error: existingApplicationError } =
+    await supabase
+      .from("seller_applications")
+      .select("id")
+      .eq("user_id", user.id)
+      .order("applied_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (
+    existingApplicationError &&
+    existingApplicationError.code !== "PGRST116"
+  ) {
+    throw existingApplicationError;
+  }
+
+  if (existingApplication?.id) {
+    const { error: updateApplicationError } = await supabase
+      .from("seller_applications")
+      .update({
+        business_name: businessName,
+        status: "pending",
+        applied_at: now,
+      })
+      .eq("id", existingApplication.id);
+
+    if (updateApplicationError) {
+      throw updateApplicationError;
+    }
+  } else {
+    const { error: insertApplicationError } = await supabase
+      .from("seller_applications")
+      .insert({
+        user_id: user.id,
+        business_name: businessName,
+        status: "pending",
+        applied_at: now,
+      });
+
+    if (insertApplicationError) {
+      throw insertApplicationError;
+    }
+  }
+
+  const { error: metadataError } = await supabase.auth.updateUser({
+    data: {
+      role: "seller",
+      business_name: businessName,
+    },
+  });
+
+  if (metadataError) {
+    throw metadataError;
   }
 }
 
@@ -70,138 +207,83 @@ export default function SellerVerificationPage() {
   const [pageError, setPageError] = useState<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-
-  const isApprovedSeller = (role ?? "").toLowerCase() === "seller";
-
-  const [documentType, setDocumentType] =
-    useState<"business_license" | "tax_id" | "id_card">("business_license");
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<AppRole>(null);
+  const [sellerStatus, setSellerStatus] = useState<SellerStatus>(null);
 
   const [docs, setDocs] = useState<SellerDocumentRow[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
 
-  // Refresh controls
+  const [documentType, setDocumentType] =
+    useState<DocumentType>("business_license");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
-  const counts = useMemo(() => {
-    const base = {
-      all: docs.length,
-      pending: 0,
-      approved: 0,
-      rejected: 0,
-    };
-    for (const d of docs) {
-      const s = (d.status as SellerDocumentStatus) || "pending";
-      if (s === "pending") base.pending += 1;
-      else if (s === "approved") base.approved += 1;
-      else if (s === "rejected") base.rejected += 1;
-    }
-    return base;
-  }, [docs]);
+  const pageMode = useMemo(
+    () => derivePageMode(userRole, sellerStatus, docs),
+    [docs, sellerStatus, userRole]
+  );
 
-  const filterTabs: { key: FilterKey; label: string }[] = [
-    { key: "pending", label: "Pending" },
-    { key: "approved", label: "Approved" },
-    { key: "rejected", label: "Rejected" },
-    { key: "all", label: "All" },
-  ];
+  const isApprovedSeller = pageMode === "approved";
+
+  const counts = useMemo(
+    () => ({
+      all: docs.length,
+      pending: docs.filter(
+        (doc) => normalizeDocumentStatus(doc.status) === "pending"
+      ).length,
+      approved: docs.filter(
+        (doc) => normalizeDocumentStatus(doc.status) === "approved"
+      ).length,
+      rejected: docs.filter(
+        (doc) => normalizeDocumentStatus(doc.status) === "rejected"
+      ).length,
+    }),
+    [docs]
+  );
 
   const filteredDocs = useMemo(() => {
-    if (!docs.length) return [];
     if (activeFilter === "all") return docs;
-    return docs.filter((d) => (d.status as SellerDocumentStatus) === activeFilter);
-  }, [docs, activeFilter]);
+    return docs.filter(
+      (doc) => normalizeDocumentStatus(doc.status) === activeFilter
+    );
+  }, [activeFilter, docs]);
 
-  const hasAnyPending = useMemo(
-    () => docs.some((d) => (d.status as SellerDocumentStatus) === "pending"),
-    [docs]
-  );
-
-  const hasAnyApprovedDoc = useMemo(
-    () => docs.some((d) => (d.status as SellerDocumentStatus) === "approved"),
-    [docs]
-  );
-
-  // ---------- SINGLE LOADER (role + docs) ----------
-  async function loadAll(opts?: { silent?: boolean }) {
-    const silent = !!opts?.silent;
+  const loadPage = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
 
     try {
       if (!silent) setLoading(true);
       setPageError(null);
 
-      // 1) Auth
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      const user = userData?.user;
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (authError || !user) {
         setAuthorized(false);
+        setUserId(null);
+        setUserRole(null);
+        setSellerStatus(null);
+        setDocs([]);
         setPageError("You must be logged in to access seller verification.");
         return;
       }
 
       setUserId(user.id);
 
-      // 2) Load profile role (verification must be accessible BEFORE seller approval)
-      const roleHint = getRoleHintFromUser(user);
-      const nextRole = await getProfileRoleWithTimeout(supabase, user.id);
-      setRole(nextRole);
+      const accessState = await getProfileAccessStateWithTimeout(
+        supabase,
+        user.id
+      );
 
-      if (!nextRole && roleHint) {
-        setRole(roleHint);
-        void syncProfileFromAuthUser(supabase, user, roleHint).catch((profileErr) => {
-          console.error("[seller/verification] profile bootstrap failed:", profileErr);
-        });
-      }
+      setUserRole(accessState.role);
+      setSellerStatus(accessState.sellerStatus);
 
-      // 2b) Auto-apply: if a logged-in customer arrives here (upgrade path),
-      // create a seller application and set seller_status = "pending" on their profile.
-      if (nextRole !== "seller" && nextRole !== "admin") {
-        // Check if they already have an application
-        const { data: existingApp } = await supabase
-          .from("seller_applications")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (!existingApp) {
-          // Create seller application
-          const businessName =
-            user.user_metadata?.business_name ||
-            user.user_metadata?.display_name ||
-            user.user_metadata?.full_name ||
-            user.email ||
-            "Seller";
-
-          await supabase.from("seller_applications").insert({
-            user_id: user.id,
-            business_name: businessName,
-            status: "pending",
-            applied_at: new Date().toISOString(),
-          });
-
-          // Update profile with seller_status and metadata
-          await supabase
-            .from("profiles")
-            .update({
-              seller_status: "pending",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", user.id);
-
-          // Update user metadata so the system knows this user applied as seller
-          await supabase.auth.updateUser({
-            data: { role: "seller" },
-          });
-        }
-      }
-
-      // 3) Load existing seller documents (for this user)
-      const { data, error } = await supabase
+      const { data: documents, error: documentError } = await supabase
         .from("seller_documents")
         .select(
           "id, seller_id, document_type, file_url, status, admin_notes, created_at, reviewed_at, reviewed_by"
@@ -209,71 +291,40 @@ export default function SellerVerificationPage() {
         .eq("seller_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error(error);
-        setPageError(error.message || "Could not load your documents.");
-        return;
+      if (documentError) {
+        throw documentError;
       }
 
-      setDocs((data || []) as SellerDocumentRow[]);
+      setDocs((documents ?? []) as SellerDocumentRow[]);
       setAuthorized(true);
       setLastRefreshedAt(new Date().toLocaleString());
-    } catch (err: any) {
-      console.error(err);
+    } catch (error: unknown) {
+      console.error("[seller/verification] load failed:", error);
       setAuthorized(false);
-      setPageError("Unexpected error while loading seller verification: " + prettyError(err));
+      setPageError(prettyError(error));
     } finally {
-      if (!opts?.silent) setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }
-
-  // Initial load
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (!alive) return;
-      await loadAll();
-      if (!alive) return;
-      setLoading(false);
-    })();
-
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-refresh: only when NOT approved yet (keeps it calm + saves quota)
   useEffect(() => {
-    if (!authorized) return;
-    if (isApprovedSeller) return;
-
-    const id = window.setInterval(() => {
-      // Silent refresh (no skeleton flicker)
-      loadAll({ silent: true });
-    }, 15000); // 15s
-
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized, isApprovedSeller]);
+    void loadPage();
+  }, [loadPage]);
 
   async function handleManualRefresh() {
     setRefreshing(true);
     setUploadMessage(null);
-    await loadAll({ silent: true });
+    await loadPage({ silent: true });
     setRefreshing(false);
   }
 
-  // ---------- UPLOAD HANDLERS ----------
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const chosen = e.target.files?.[0] ?? null;
-    setFile(chosen);
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
     setUploadMessage(null);
   }
 
-  async function handleUpload(e: FormEvent) {
-    e.preventDefault();
+  async function handleUpload(event: FormEvent) {
+    event.preventDefault();
 
     if (!file) {
       setUploadMessage("Please choose a file first.");
@@ -290,76 +341,75 @@ export default function SellerVerificationPage() {
     setPageError(null);
 
     try {
-      const timestamp = Date.now();
-      const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const path = `${userId}/${timestamp}-${safeName}`;
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-      // 1) upload to storage
+      if (authError || !user) {
+        throw authError ?? new Error("You must be logged in.");
+      }
+
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = `${user.id}/${timestamp}-${safeName}`;
+
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(path, file, {
+        .upload(storagePath, file, {
           cacheControl: "3600",
           upsert: false,
         });
 
       if (uploadError) {
-        console.error(uploadError);
-        setPageError(uploadError.message || "Could not upload file.");
-        return;
+        throw uploadError;
       }
 
       const { data: publicUrlData } = supabase.storage
         .from(STORAGE_BUCKET)
-        .getPublicUrl(path);
+        .getPublicUrl(storagePath);
 
-      const publicUrl = publicUrlData?.publicUrl;
+      const publicUrl = publicUrlData.publicUrl;
       if (!publicUrl) {
-        setPageError("Could not get public URL for uploaded file.");
-        return;
+        throw new Error("Could not create a public URL for the uploaded file.");
       }
 
-      // 2) insert row into seller_documents
-      const { data: inserted, error: insertError } = await supabase
+      const { error: documentInsertError } = await supabase
         .from("seller_documents")
         .insert({
-          seller_id: userId,
+          seller_id: user.id,
           document_type: documentType,
           file_url: publicUrl,
           status: "pending",
-        })
-        .select(
-          "id, seller_id, document_type, file_url, status, admin_notes, created_at, reviewed_at, reviewed_by"
-        )
-        .maybeSingle();
+        });
 
-      if (insertError) {
-        console.error(insertError);
-        setPageError(insertError.message || "Could not save document record.");
-        return;
+      if (documentInsertError) {
+        throw documentInsertError;
       }
 
-      if (inserted) {
-        setDocs((prev) => [inserted as SellerDocumentRow, ...prev]);
-        setUploadMessage("Document uploaded successfully and is pending review.");
-      }
+      await ensureSellerApplicationForSubmission(user, sellerStatus);
 
-      // Reset file + UI
-      setFile(null);
       setDocumentType("business_license");
-      const input = document.getElementById("seller-doc-file-input") as HTMLInputElement | null;
-      if (input) input.value = "";
+      setFile(null);
 
-      // Silent refresh so role/doc status stays accurate
-      await loadAll({ silent: true });
-    } catch (err: any) {
-      console.error(err);
-      setPageError("Unexpected error while uploading document: " + prettyError(err));
+      const input = document.getElementById(
+        "seller-doc-file-input"
+      ) as HTMLInputElement | null;
+
+      if (input) {
+        input.value = "";
+      }
+
+      setUploadMessage("Document uploaded and submitted for review.");
+      await loadPage({ silent: true });
+    } catch (error: unknown) {
+      console.error("[seller/verification] upload failed:", error);
+      setPageError(prettyError(error));
     } finally {
       setUploading(false);
     }
   }
 
-  // ---------- EARLY ACCESS ERROR ----------
   if (!loading && !authorized && pageError) {
     return (
       <main className="min-h-screen px-4 py-6 md:px-10">
@@ -367,18 +417,16 @@ export default function SellerVerificationPage() {
         <div className="bg-vignette" />
         <div className="sparkles" />
 
-        <div className="mx-auto max-w-4xl">
-          <div className="glass glass-card glow-green rounded-[22px] glass-ring p-6 text-center mt-6">
-            <div className="text-4xl mb-2">🚫</div>
-            <div className="text-lg font-semibold text-slate-900 mb-1">
-              Access restricted
-            </div>
-            <div className="text-sm text-slate-700 mb-3">{pageError}</div>
+        <div className="mx-auto mt-8 max-w-3xl">
+          <div className="glass glass-card glow-green rounded-[24px] glass-ring p-6 text-center">
+            <div className="text-4xl">Access restricted</div>
+            <p className="mt-3 text-sm text-slate-700">{pageError}</p>
             <button
-              className="pill px-4 py-2 font-semibold text-slate-900"
+              type="button"
               onClick={() => router.push("/")}
+              className="pill mt-5 px-4 py-2 text-sm font-semibold text-slate-900"
             >
-              ← Home
+              Back to home
             </button>
           </div>
         </div>
@@ -386,43 +434,39 @@ export default function SellerVerificationPage() {
     );
   }
 
-  // ---------- MAIN UI ----------
   return (
     <main className="min-h-screen px-4 py-6 md:px-10">
-      {/* background layers */}
       <div className="bg-scene" />
       <div className="bg-vignette" />
       <div className="sparkles" />
 
-      <div className="mx-auto max-w-6xl">
-        {/* HEADER CARD */}
-        <div className="glass glass-card glow-blue rounded-[28px] glass-ring p-6 md:p-8 mt-4">
-          <div className="flex items-start justify-between gap-4">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <section className="glass glass-card glow-blue rounded-[28px] glass-ring p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <div className="text-sm font-semibold text-slate-700">My account</div>
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold text-slate-900">
+              <div className="text-sm font-semibold text-slate-700">
+                My account
+              </div>
+              <h1 className="text-3xl font-semibold text-slate-900 md:text-4xl">
                 Seller verification
               </h1>
-              <p className="mt-2 text-sm md:text-base text-slate-700 max-w-2xl">
-                Complete two quick steps: discover requirements, then apply with your document.
+              <p className="mt-2 max-w-2xl text-sm text-slate-700 md:text-base">
+                Check your seller status and upload verification documents only
+                when you need to apply or resubmit.
               </p>
-
-              <div className="mt-4 flex md:hidden items-center gap-2">
-                <a href="#discover" className="pill px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white/70 border border-white/90">
-                  1. Discover
-                </a>
-                <a href="#apply" className="pill px-3 py-1.5 text-xs font-semibold text-slate-900 bg-emerald-300/80 border border-emerald-400/80">
-                  2. Apply
-                </a>
-              </div>
             </div>
 
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                className="pill px-4 py-2 text-xs md:text-sm font-semibold text-slate-900"
-                onClick={() => router.push(isApprovedSeller ? "/seller" : "/account")}
+                type="button"
+                onClick={() =>
+                  router.push(isApprovedSeller ? "/seller" : "/account")
+                }
+                className="pill px-4 py-2 text-sm font-semibold text-slate-900"
               >
-                {isApprovedSeller ? "← Back to seller dashboard" : "← Back to account"}
+                {isApprovedSeller
+                  ? "Back to seller dashboard"
+                  : "Back to account"}
               </button>
 
               <button
@@ -430,100 +474,103 @@ export default function SellerVerificationPage() {
                 onClick={handleManualRefresh}
                 disabled={refreshing || uploading}
                 className={[
-                  "hidden md:inline-flex pill px-4 py-2 text-xs md:text-sm font-semibold",
+                  "pill px-4 py-2 text-sm font-semibold",
                   refreshing
                     ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-                    : "bg-white/60 text-slate-800 border border-white/80 hover:bg-white",
+                    : "bg-white/70 text-slate-900 border border-white/80",
                 ].join(" ")}
-                title="Refresh status (role + documents)"
               >
-                {refreshing ? "Refreshing…" : "↻ Refresh status"}
+                {refreshing ? "Refreshing..." : "Refresh status"}
               </button>
-
-              {lastRefreshedAt && (
-                <div className="hidden md:block text-[10px] text-slate-600">
-                  Last checked: <span className="font-semibold">{lastRefreshedAt}</span>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* STATUS BANNER (role + docs progress) */}
-          {!loading && (
-            <div
-              className={[
-                "mt-5 rounded-2xl border px-4 py-3",
-                isApprovedSeller
-                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+          <div
+            className={[
+              "mt-5 rounded-2xl border px-4 py-4",
+              pageMode === "approved"
+                ? "border-emerald-200 bg-emerald-50/85 text-emerald-950"
+                : pageMode === "rejected"
+                  ? "border-rose-200 bg-rose-50/90 text-rose-950"
                   : "border-amber-200 bg-amber-50/90 text-amber-950",
-              ].join(" ")}
-            >
-              {isApprovedSeller ? (
-                <div>
-                  <div className="font-semibold">✅ Seller status: Approved</div>
-                  <div className="mt-0.5 text-sm opacity-90">
-                    Your account is approved. You can create and submit products.
-                  </div>
+            ].join(" ")}
+          >
+            {pageMode === "approved" && (
+              <>
+                <div className="font-semibold">Seller status: Approved</div>
+                <div className="mt-1 text-sm opacity-90">
+                  Your seller access is active. This page will not reset your
+                  approval status.
                 </div>
-              ) : (
-                <div>
-                  <div className="font-semibold">⚠️ Seller status: Pending approval</div>
-                  <div className="mt-0.5 text-sm opacity-90">
-                    Upload one valid document below. We review and update your status.
-                  </div>
-                  <div className="mt-2 text-[11px] text-slate-700">
-                    {hasAnyPending ? "You already have a pending submission." : "No submission yet."}
-                  </div>
+              </>
+            )}
+
+            {pageMode === "pending" && (
+              <>
+                <div className="font-semibold">Seller status: Pending review</div>
+                <div className="mt-1 text-sm opacity-90">
+                  Your submission is waiting for admin review. You can refresh
+                  this page to check for changes.
                 </div>
-              )}
-            </div>
-          )}
+              </>
+            )}
+
+            {pageMode === "rejected" && (
+              <>
+                <div className="font-semibold">Seller status: Rejected</div>
+                <div className="mt-1 text-sm opacity-90">
+                  You can upload a new document below to resubmit for review.
+                </div>
+              </>
+            )}
+
+            {pageMode === "not_started" && (
+              <>
+                <div className="font-semibold">Seller status: Not submitted</div>
+                <div className="mt-1 text-sm opacity-90">
+                  Upload one business document to start your seller review.
+                </div>
+              </>
+            )}
+
+            {lastRefreshedAt && (
+              <div className="mt-3 text-xs opacity-70">
+                Last checked: {lastRefreshedAt}
+              </div>
+            )}
+          </div>
 
           {pageError && (
-            <div className="mt-4 text-sm text-red-700 bg-white/60 border border-red-200 rounded-2xl px-4 py-3 whitespace-pre-wrap">
+            <div className="mt-4 rounded-2xl border border-red-200 bg-white/70 px-4 py-3 text-sm text-red-700">
               {pageError}
             </div>
           )}
-        </div>
-
-        {/* DISCOVER CARD */}
-        <section id="discover" className="mt-6 glass glass-card rounded-[24px] glass-ring p-5 md:p-6">
-          <h2 className="text-lg md:text-xl font-semibold text-slate-900">1. Discover requirements</h2>
-          <p className="mt-1 text-sm text-slate-700">
-            Submit one clear document that proves your business identity.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="rounded-full bg-white/80 border border-white px-3 py-1.5 text-xs font-semibold text-slate-800">Business license</span>
-            <span className="rounded-full bg-white/80 border border-white px-3 py-1.5 text-xs font-semibold text-slate-800">Tax ID / EIN</span>
-            <span className="rounded-full bg-white/80 border border-white px-3 py-1.5 text-xs font-semibold text-slate-800">Government ID</span>
-          </div>
-          <p className="mt-3 text-[11px] text-slate-600">
-            Tip: upload a readable image or PDF to avoid rejection.
-          </p>
         </section>
 
-        {/* UPLOAD CARD */}
-        <section id="apply" className="mt-6 glass glass-card glow-green rounded-[28px] glass-ring p-6 md:p-8">
-          <h2 className="text-lg md:text-xl font-semibold text-slate-900">
-            2. Apply to become a seller
-          </h2>
-          <p className="mt-1 text-sm text-slate-700">
-            Choose document type, upload file, and submit.
-          </p>
+        {!isApprovedSeller && (
+          <section className="glass glass-card glow-green rounded-[28px] glass-ring p-6 md:p-8">
+            <h2 className="text-lg font-semibold text-slate-900 md:text-xl">
+              Submit verification
+            </h2>
+            <p className="mt-1 text-sm text-slate-700">
+              Upload a business license, tax ID, or government ID. Your seller
+              status will only move to pending when you explicitly submit a
+              document.
+            </p>
 
-          <form onSubmit={handleUpload} className="mt-4">
-            <div className="mt-2 grid gap-4 md:grid-cols-[1.7fr,1.3fr] items-end">
-              {/* LEFT: fields */}
+            <form onSubmit={handleUpload} className="mt-5 grid gap-4 md:grid-cols-[1.6fr,1.4fr]">
               <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
                     Document type
                   </label>
                   <select
                     value={documentType}
-                    onChange={(e) => setDocumentType(e.target.value as typeof documentType)}
-                    className="w-full rounded-full border border-white/80 bg-white/90 px-4 py-2.5 text-sm text-slate-900 outline-none"
+                    onChange={(event) =>
+                      setDocumentType(event.target.value as DocumentType)
+                    }
                     disabled={uploading}
+                    className="w-full rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm text-slate-900 outline-none"
                   >
                     <option value="business_license">Business license</option>
                     <option value="tax_id">Tax ID / EIN</option>
@@ -531,135 +578,139 @@ export default function SellerVerificationPage() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">File</label>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    File
+                  </label>
                   <input
                     id="seller-doc-file-input"
                     type="file"
                     onChange={handleFileChange}
                     disabled={uploading}
-                    className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-slate-900/90 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white file:cursor-pointer"
+                    className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white"
                   />
                 </div>
               </div>
 
-              {/* RIGHT: button */}
-              <div className="flex justify-end md:justify-center">
+              <div className="flex items-end">
                 <button
                   type="submit"
                   disabled={uploading || !file || !userId}
-                  className="btn-cta w-full md:w-auto px-8 py-3 rounded-full text-sm md:text-base font-semibold text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/40"
+                  className="btn-cta w-full rounded-full px-6 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {uploading ? "Submitting…" : "Submit application"}
+                  {uploading ? "Submitting..." : "Submit for review"}
                 </button>
               </div>
-            </div>
-          </form>
+            </form>
 
-          {uploadMessage && !pageError && (
-            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-xs md:text-sm text-emerald-900">
-              {uploadMessage}
-            </div>
-          )}
-        </section>
+            {uploadMessage && !pageError && (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-900">
+                {uploadMessage}
+              </div>
+            )}
+          </section>
+        )}
 
-        {/* FILTER TABS + LIST */}
-        <div className="mt-6 glass glass-card rounded-[24px] glass-ring p-5 md:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm md:text-base font-semibold text-slate-900">
-              Your verification documents
+        <section className="glass glass-card rounded-[24px] glass-ring p-5 md:p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-900 md:text-lg">
+              Verification documents
             </h2>
+
             <div className="flex flex-wrap gap-2">
-              {filterTabs.map((tab) => {
-                const isActive = activeFilter === tab.key;
-                const count =
-                  tab.key === "all"
-                    ? counts.all
-                    : counts[tab.key as SellerDocumentStatus];
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveFilter(tab.key)}
-                    type="button"
-                    className={[
-                      "pill px-3 py-1.5 text-[11px] md:text-xs font-semibold",
-                      isActive
-                        ? "bg-emerald-500/90 text-white shadow-lg shadow-emerald-500/40"
-                        : "bg-white/60 text-slate-800 border border-white/80",
-                    ].join(" ")}
-                  >
-                    {tab.label}{" "}
-                    <span className="text-[10px] opacity-75">({count})</span>
-                  </button>
-                );
-              })}
+              {(["pending", "approved", "rejected", "all"] as FilterKey[]).map(
+                (key) => {
+                  const count =
+                    key === "all"
+                      ? counts.all
+                      : counts[key as SellerDocumentStatus];
+
+                  const isActive = activeFilter === key;
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setActiveFilter(key)}
+                      className={[
+                        "pill px-3 py-1.5 text-xs font-semibold",
+                        isActive
+                          ? "bg-emerald-500/90 text-white shadow-lg shadow-emerald-500/40"
+                          : "bg-white/70 text-slate-900 border border-white/80",
+                      ].join(" ")}
+                    >
+                      {key === "all"
+                        ? "All"
+                        : key.charAt(0).toUpperCase() + key.slice(1)}{" "}
+                      <span className="opacity-75">({count})</span>
+                    </button>
+                  );
+                }
+              )}
             </div>
           </div>
 
           {loading ? (
-            <div className="text-sm text-slate-700">Loading your documents…</div>
+            <div className="text-sm text-slate-700">Loading documents...</div>
           ) : filteredDocs.length === 0 ? (
-            <div className="rounded-2xl bg-white/70 border border-white/80 px-4 py-6 text-sm text-slate-700">
-              You haven&apos;t uploaded any verification documents yet. Use the form above to get started.
+            <div className="rounded-2xl border border-white/80 bg-white/70 px-4 py-6 text-sm text-slate-700">
+              No verification documents found yet.
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredDocs.map((d) => {
-                const status = (d.status as SellerDocumentStatus) || "pending";
+              {filteredDocs.map((doc) => {
+                const status = normalizeDocumentStatus(doc.status) ?? "pending";
 
-                let badgeClass = "bg-slate-900/85 text-white shadow-slate-900/40";
+                let badgeClass = "bg-amber-400/90 text-slate-900";
                 if (status === "approved") {
-                  badgeClass = "bg-emerald-500/90 text-white shadow-emerald-500/40";
+                  badgeClass = "bg-emerald-500/90 text-white";
                 } else if (status === "rejected") {
-                  badgeClass = "bg-rose-500/90 text-white shadow-rose-500/40";
-                } else if (status === "pending") {
-                  badgeClass = "bg-amber-400/90 text-slate-900 shadow-amber-400/40";
+                  badgeClass = "bg-rose-500/90 text-white";
                 }
 
                 return (
                   <div
-                    key={d.id}
-                    className="flex flex-col gap-3 rounded-2xl bg-white/75 border border-white/80 p-4 md:flex-row md:items-center md:justify-between"
+                    key={doc.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/75 p-4 md:flex-row md:items-center md:justify-between"
                   >
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <div className="text-sm font-semibold text-slate-900">
-                          {humanDocumentType(d.document_type)}
+                          {humanDocumentType(doc.document_type)}
                         </div>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide shadow-md ${badgeClass}`}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${badgeClass}`}
                         >
                           {labelStatus(status)}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-600 mt-1">
-                        Uploaded: {new Date(d.created_at).toLocaleString()}
+
+                      <div className="mt-1 text-xs text-slate-600">
+                        Uploaded: {new Date(doc.created_at).toLocaleString()}
                       </div>
-                      {d.admin_notes && (
-                        <div className="mt-1 text-[11px] text-slate-700">
+
+                      {doc.admin_notes && (
+                        <div className="mt-1 text-xs text-slate-700">
                           Admin notes:{" "}
-                          <span className="font-medium">{d.admin_notes}</span>
+                          <span className="font-medium">{doc.admin_notes}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 md:flex-col md:items-end">
-                      <a
-                        href={d.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-full bg-slate-900/90 px-4 py-1.5 text-[11px] font-semibold text-white shadow-md shadow-slate-900/40"
-                      >
-                        View file
-                      </a>
-                    </div>
+                    <a
+                      href={doc.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
+                    >
+                      View file
+                    </a>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
-
+        </section>
       </div>
     </main>
   );

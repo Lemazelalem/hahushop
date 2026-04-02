@@ -69,11 +69,16 @@ export async function middleware(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, seller_status")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!profile || (profile.role !== "seller" && profile.role !== "admin")) {
+    const isApprovedSeller =
+      profile?.role === "seller" ||
+      profile?.role === "admin" ||
+      profile?.seller_status === "approved";
+
+    if (!profile || !isApprovedSeller) {
       return NextResponse.redirect(new URL("/", request.url));
     }
   }

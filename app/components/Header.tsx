@@ -133,7 +133,8 @@ export default function Header() {
   const userRole = profile?.role ?? null;
   const isCustomer = userRole === "customer";
   const isAdmin = userRole === "admin";
-  const isSeller = userRole === "seller";
+  const isSeller =
+    userRole === "seller" || profile?.seller_status === "approved";
   const isBusinessAccount = profile?.is_business_account === true;
 
   useEffect(() => {

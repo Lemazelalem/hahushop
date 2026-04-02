@@ -212,7 +212,6 @@ export default function AdminApprovedSellersPage() {
           { data: salesRows, error: salesError },
           { data: payoutRows, error: payoutError },
           { data: sellerDocRows, error: sellerDocError },
-          { data: roleSellerRows, error: roleSellerError },
         ] = await Promise.all([
           supabase
             .from("products")
@@ -227,10 +226,6 @@ export default function AdminApprovedSellersPage() {
             .from("seller_payouts")
             .select("id, seller_id, status, calculated_amount_cents, adjusted_amount_cents, paid_at"),
           supabase.from("seller_documents").select("seller_id"),
-          supabase
-            .from("profiles")
-            .select("id")
-            .eq("role", "seller"),
         ]);
 
         if (!alive) return;
@@ -252,9 +247,6 @@ export default function AdminApprovedSellersPage() {
         for (const d of sellerDocRows ?? []) {
           if (d.seller_id) sellerIdSet.add(d.seller_id);
         }
-        for (const r of roleSellerRows ?? []) {
-          if (r.id) sellerIdSet.add(r.id);
-        }
         for (const s of salesRows ?? []) {
           if (s.seller_id) sellerIdSet.add(s.seller_id);
         }
@@ -262,19 +254,27 @@ export default function AdminApprovedSellersPage() {
           if (pay.seller_id) sellerIdSet.add(pay.seller_id);
         }
 
-        // 3) Fetch profiles for all discovered seller IDs
+        // 3) Fetch profiles via server API (bypasses RLS on profiles table)
         let sellerProfiles: SellerProfile[] = [];
         const sellerIds = Array.from(sellerIdSet);
-        if (sellerIds.length > 0) {
-          const { data: profileData, error: profileErr } = await supabase
-            .from("profiles")
-            .select("id, display_name, full_name, phone, role")
-            .in("id", sellerIds);
 
-          if (profileErr) {
-            console.error("[approved-sellers] profiles fetch error:", profileErr);
+        // Fetch seller-role profiles via API (discovers sellers not in other tables)
+        const roleRes = await fetch("/api/admin/profiles?role=seller");
+        if (roleRes.ok) {
+          const roleData = await roleRes.json();
+          for (const p of roleData.profiles ?? []) {
+            if (p.id) sellerIdSet.add(p.id);
           }
-          sellerProfiles = (profileData ?? []) as SellerProfile[];
+        }
+
+        // Fetch full profiles for all discovered seller IDs
+        const allSellerIds = Array.from(sellerIdSet);
+        if (allSellerIds.length > 0) {
+          const profRes = await fetch(`/api/admin/profiles?ids=${allSellerIds.join(",")}`);
+          if (profRes.ok) {
+            const profData = await profRes.json();
+            sellerProfiles = (profData.profiles ?? []) as SellerProfile[];
+          }
         }
 
         setSellers(sellerProfiles);

@@ -168,7 +168,6 @@ export default function AdminSellerPayoutsPage() {
           { data: prodData, error: prodErr },
           { data: payoutData, error: payoutErr },
           { data: sellerDocData, error: sellerDocErr },
-          { data: roleSellerData, error: roleSellerErr },
         ] = await Promise.all([
           supabase.from("products").select("id, seller_id, name, status, is_active"),
           supabase
@@ -177,10 +176,6 @@ export default function AdminSellerPayoutsPage() {
               "id, seller_id, status, period_start, period_end, calculated_amount_cents, adjusted_amount_cents, paid_at"
             ),
           supabase.from("seller_documents").select("seller_id"),
-          supabase
-            .from("profiles")
-            .select("id")
-            .eq("role", "seller"),
         ]);
 
         if (!alive || !mountedRef.current) return;
@@ -188,7 +183,6 @@ export default function AdminSellerPayoutsPage() {
         if (prodErr) console.error("[admin payouts] products query error:", prodErr);
         if (payoutErr) console.error("[admin payouts] seller_payouts query error:", payoutErr);
         if (sellerDocErr) console.error("[admin payouts] seller_documents query error:", sellerDocErr);
-        if (roleSellerErr) console.error("[admin payouts] role seller query error:", roleSellerErr);
 
         // 2) Collect all unique seller IDs from multiple sources
         const sellerIdSet = new Set<string>();
@@ -198,26 +192,30 @@ export default function AdminSellerPayoutsPage() {
         for (const d of sellerDocData ?? []) {
           if (d.seller_id) sellerIdSet.add(d.seller_id);
         }
-        for (const r of roleSellerData ?? []) {
-          if (r.id) sellerIdSet.add(r.id);
-        }
         for (const pay of payoutData ?? []) {
           if (pay.seller_id) sellerIdSet.add(pay.seller_id);
         }
 
-        // 3) Fetch profiles for all discovered seller IDs
+        // 3) Fetch profiles via server API (bypasses RLS on profiles table)
         let sellerProfiles: SellerRow[] = [];
+
+        // Get seller-role profiles (discovers sellers not in other tables)
+        const roleRes = await fetch("/api/admin/profiles?role=seller");
+        if (roleRes.ok) {
+          const roleData = await roleRes.json();
+          for (const p of roleData.profiles ?? []) {
+            if (p.id) sellerIdSet.add(p.id);
+          }
+        }
+
+        // Fetch full profiles for all discovered seller IDs
         const sellerIds = Array.from(sellerIdSet);
         if (sellerIds.length > 0) {
-          const { data: profileData, error: profileErr } = await supabase
-            .from("profiles")
-            .select("id, display_name, full_name, phone, role")
-            .in("id", sellerIds);
-
-          if (profileErr) {
-            console.error("[admin payouts] profiles fetch error:", profileErr);
+          const profRes = await fetch(`/api/admin/profiles?ids=${sellerIds.join(",")}`);
+          if (profRes.ok) {
+            const profData = await profRes.json();
+            sellerProfiles = (profData.profiles ?? []) as SellerRow[];
           }
-          sellerProfiles = (profileData ?? []) as SellerRow[];
         }
 
         if (!alive || !mountedRef.current) return;

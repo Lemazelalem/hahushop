@@ -275,7 +275,7 @@ export default function AdminDashboard() {
           .sort((a, b) => b.revenue_cents - a.revenue_cents)
           .slice(0, 5);
 
-        // Get seller counts (multi-source: profiles.role + products.seller_id + seller_documents)
+        // Get seller counts (multi-source: products.seller_id + seller_documents + server API for profiles)
         const sellerIdSet = new Set<string>();
         // From products
         const { data: prodSellers } = await supabase
@@ -291,14 +291,16 @@ export default function AdminDashboard() {
         for (const d of docSellers ?? []) {
           if (d.seller_id) sellerIdSet.add(d.seller_id);
         }
-        // From profiles.role = 'seller'
-        const { data: roleSellers } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("role", "seller");
-        for (const r of roleSellers ?? []) {
-          if (r.id) sellerIdSet.add(r.id);
-        }
+        // From profiles.role = 'seller' (via server API to bypass RLS)
+        try {
+          const roleRes = await fetch("/api/admin/profiles?role=seller");
+          if (roleRes.ok) {
+            const roleData = await roleRes.json();
+            for (const r of roleData.profiles ?? []) {
+              if (r.id) sellerIdSet.add(r.id);
+            }
+          }
+        } catch { /* ignore fetch errors for count */ }
         const totalSellersCount = sellerIdSet.size;
 
         // Pending seller verifications (documents awaiting review)

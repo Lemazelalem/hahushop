@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   syncProfileFromAuthUser,
+  getProfileAccessStateWithTimeout,
   getRoleHintFromUser,
-  normalizeAppRole,
 } from "@/lib/authProfile";
 
 export async function GET(request: NextRequest) {
@@ -48,25 +48,30 @@ export async function GET(request: NextRequest) {
           const roleHint = getRoleHintFromUser(user);
 
           if (roleHint) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("role, seller_status")
-              .eq("id", user.id)
-              .maybeSingle();
-
-            const existingRole = normalizeAppRole(profile?.role);
+            let accessState = await getProfileAccessStateWithTimeout(
+              supabase,
+              user.id
+            );
+            let existingRole = accessState.role;
 
             // Bootstrap profile if it doesn't exist yet.
             // NOTE: syncProfileFromAuthUser no longer auto-sets role='seller'.
             // Seller role is granted only by admin approval.
             if (!existingRole) {
               await syncProfileFromAuthUser(supabase, user, roleHint);
+              accessState = await getProfileAccessStateWithTimeout(
+                supabase,
+                user.id
+              );
+              existingRole = accessState.role;
             }
 
             // Route seller applicants to verification page
             // (they need admin approval before accessing /seller dashboard)
-            if (roleHint === "seller" && existingRole !== "seller") {
+            if (roleHint === "seller" && !accessState.isApprovedSeller) {
               redirectPath = "/seller/verification";
+            } else if (roleHint === "seller") {
+              redirectPath = "/seller";
             }
           }
         }

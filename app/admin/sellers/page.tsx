@@ -79,6 +79,11 @@ const FILTER_BTN: Record<
   },
 };
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 /* ─── Page ───────────────────────────────────────────────── */
 
 export default function AdminSellerVerificationPage() {
@@ -92,7 +97,7 @@ export default function AdminSellerVerificationPage() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("pending");
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  /* ── Load all seller data from multiple sources ── */
+  /* ── Load all seller data via server API (bypasses RLS) ── */
   useEffect(() => {
     let alive = true;
 
@@ -101,6 +106,7 @@ export default function AdminSellerVerificationPage() {
       setPageError(null);
 
       try {
+        // Quick auth check (own profile is readable via RLS)
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -126,66 +132,25 @@ export default function AdminSellerVerificationPage() {
         if (!alive) return;
         setAuthorized(true);
 
-        // Fetch all data sources in parallel
-        const [appsRes, docsRes, productsRes, profilesWithStatusRes] =
-          await Promise.all([
-            supabase
-              .from("seller_applications")
-              .select("id, user_id, business_name, status, applied_at")
-              .order("applied_at", { ascending: false }),
-            supabase
-              .from("seller_documents")
-              .select(
-                "id, seller_id, document_type, file_url, status, admin_notes, created_at"
-              )
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("products")
-              .select("seller_id"),
-            supabase
-              .from("profiles")
-              .select("id, display_name, full_name, phone, business_name, role, seller_status")
-              .or("role.eq.seller,seller_status.eq.pending,seller_status.eq.approved,seller_status.eq.rejected"),
-          ]);
-
-        const apps = (appsRes.data ?? []) as AppRow[];
-        const docs = (docsRes.data ?? []) as DocRow[];
-        const products = (productsRes.data ?? []) as { seller_id: string | null }[];
-        const profilesWithStatus = (profilesWithStatusRes.data ?? []) as ProfileRow[];
-
-        // Collect ALL unique seller IDs
-        const sellerIdSet = new Set<string>();
-        apps.forEach((a) => sellerIdSet.add(a.user_id));
-        docs.forEach((d) => sellerIdSet.add(d.seller_id));
-        products.forEach((p) => {
-          if (p.seller_id) sellerIdSet.add(p.seller_id);
-        });
-        profilesWithStatus.forEach((p) => sellerIdSet.add(p.id));
-
-        // Remove the admin's own ID
-        sellerIdSet.delete(session.user.id);
-
-        if (!alive) return;
-
-        if (sellerIdSet.size === 0) {
-          setSellers([]);
-          setLoading(false);
-          return;
+        // Fetch ALL seller data via server API (uses service role key, bypasses RLS)
+        const res = await fetch("/api/admin/sellers");
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error ?? "Failed to load sellers");
         }
 
-        // Fetch profiles for all discovered sellers
-        const sellerIds = [...sellerIdSet];
-        const { data: allProfiles } = await supabase
-          .from("profiles")
-          .select("id, display_name, full_name, phone, business_name, role, seller_status")
-          .in("id", sellerIds);
+        const data = await res.json();
+        const profiles = (data.profiles ?? []) as ProfileRow[];
+        const apps = (data.applications ?? []) as AppRow[];
+        const docs = (data.documents ?? []) as DocRow[];
+        const products = (data.products ?? []) as { seller_id: string | null }[];
 
         if (!alive) return;
 
+        // Build lookup maps
         const profileMap = new Map<string, ProfileRow>();
-        (allProfiles ?? []).forEach((p: ProfileRow) => profileMap.set(p.id, p));
+        profiles.forEach((p) => profileMap.set(p.id, p));
 
-        // Index apps/docs/products by seller ID
         const appMap = new Map<string, AppRow>();
         apps.forEach((a) => {
           if (!appMap.has(a.user_id)) appMap.set(a.user_id, a);
@@ -208,6 +173,23 @@ export default function AdminSellerVerificationPage() {
           }
         });
 
+        // Collect ALL unique seller IDs
+        const sellerIdSet = new Set<string>();
+        apps.forEach((a) => sellerIdSet.add(a.user_id));
+        docs.forEach((d) => sellerIdSet.add(d.seller_id));
+        products.forEach((p) => {
+          if (p.seller_id) sellerIdSet.add(p.seller_id);
+        });
+        profiles.forEach((p) => sellerIdSet.add(p.id));
+
+        // Remove admin's own ID and any admin-role profiles
+        sellerIdSet.delete(session.user.id);
+        profiles.forEach((p) => {
+          if (p.role === "admin") sellerIdSet.delete(p.id);
+        });
+
+        const sellerIds = [...sellerIdSet];
+
         // Build seller views
         const views: SellerView[] = sellerIds.map((sid) => {
           const profile = profileMap.get(sid);
@@ -221,12 +203,12 @@ export default function AdminSellerVerificationPage() {
             profile?.business_name?.trim() ||
             "Unknown";
 
+          const isRejected =
+            profile?.seller_status === "rejected" ||
+            app?.status === "rejected";
           const isRoleSeller = profile?.role === "seller";
           const isStatusApproved =
-            profile?.seller_status === "approved" || isRoleSeller;
-          const isRejected =
-            app?.status === "rejected" ||
-            profile?.seller_status === "rejected";
+            !isRejected && (profile?.seller_status === "approved" || isRoleSeller);
 
           let approvalState: "pending" | "approved" | "rejected" = "pending";
           if (isStatusApproved) approvalState = "approved";
@@ -258,9 +240,9 @@ export default function AdminSellerVerificationPage() {
         );
 
         setSellers(views);
-      } catch (err: any) {
+      } catch (error: unknown) {
         if (!alive) return;
-        setPageError(err?.message ?? "Failed to load sellers.");
+        setPageError(errorMessage(error, "Failed to load sellers."));
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -330,8 +312,8 @@ export default function AdminSellerVerificationPage() {
             : s
         )
       );
-    } catch (err: any) {
-      setPageError(err?.message ?? "Failed to approve seller.");
+    } catch (error: unknown) {
+      setPageError(errorMessage(error, "Failed to approve seller."));
     } finally {
       setSavingId(null);
     }
@@ -368,8 +350,8 @@ export default function AdminSellerVerificationPage() {
             : s
         )
       );
-    } catch (err: any) {
-      setPageError(err?.message ?? "Failed to reject seller.");
+    } catch (error: unknown) {
+      setPageError(errorMessage(error, "Failed to reject seller."));
     } finally {
       setSavingId(null);
     }
@@ -406,8 +388,8 @@ export default function AdminSellerVerificationPage() {
             : s
         )
       );
-    } catch (err: any) {
-      setPageError(err?.message ?? "Failed to revert seller.");
+    } catch (error: unknown) {
+      setPageError(errorMessage(error, "Failed to revert seller."));
     } finally {
       setSavingId(null);
     }

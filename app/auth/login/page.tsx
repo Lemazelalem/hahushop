@@ -5,7 +5,7 @@ import { FormEvent, Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  getProfileRoleWithTimeout,
+  getProfileAccessStateWithTimeout,
   getRoleHintFromUser,
   syncProfileFromAuthUser,
   type AppRole,
@@ -66,11 +66,12 @@ function LoginPageContent() {
 
   function defaultPathForRole(
     profileRole: ProfileRow["role"],
-    roleHint: ProfileRow["role"]
+    roleHint: ProfileRow["role"],
+    isApprovedSeller: boolean
   ) {
     // 🔒 If a returnUrl or redirect was passed, always go there after login
     if (profileRole === "admin") return "/admin";
-    if (profileRole === "seller") return "/seller";
+    if (profileRole === "seller" || isApprovedSeller) return "/seller";
     if (roleHint === "seller") return "/seller/verification";
     return "/";
 
@@ -125,7 +126,9 @@ function LoginPageContent() {
       }
 
       // For role-based routing: read profile first, bootstrap only if missing
-      let profileRole = await getProfileRoleWithTimeout(supabase, user.id);
+      let accessState = await getProfileAccessStateWithTimeout(supabase, user.id);
+      let profileRole = accessState.role;
+      let isApprovedSeller = accessState.isApprovedSeller;
 
       // If no profile at all, create one (without seller role — admin approval required)
       if (!profileRole && roleHint) {
@@ -135,6 +138,13 @@ function LoginPageContent() {
           // so profileRole stays null for seller applicants
           if (roleHint !== "seller") {
             profileRole = roleHint;
+          } else {
+            accessState = await getProfileAccessStateWithTimeout(
+              supabase,
+              user.id
+            );
+            profileRole = accessState.role;
+            isApprovedSeller = accessState.isApprovedSeller;
           }
         } catch (profileErr) {
           console.error("[LOGIN] profile bootstrap failed:", profileErr);
@@ -152,7 +162,7 @@ function LoginPageContent() {
       }
 
       if (redirectTo === "/seller") {
-        if (profileRole === "seller") {
+        if (profileRole === "seller" || isApprovedSeller) {
           finishLogin("/seller");
           return;
         }
@@ -166,7 +176,7 @@ function LoginPageContent() {
         return;
       }
 
-      finishLogin(defaultPathForRole(profileRole, roleHint));
+      finishLogin(defaultPathForRole(profileRole, roleHint, isApprovedSeller));
     } catch (err) {
       console.error("Unexpected login error:", err);
       setError("An unexpected error occurred. Please try again later.");

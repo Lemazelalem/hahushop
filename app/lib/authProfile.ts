@@ -1,10 +1,22 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "seller" | "customer" | null;
+export type SellerStatus = "pending" | "approved" | "rejected" | null;
 
 type MaybeError = {
   code?: string;
   message?: string;
+};
+
+type ExistingProfileRow = {
+  role: unknown;
+  seller_status: string | null;
+};
+
+export type ProfileAccessState = {
+  role: AppRole;
+  sellerStatus: SellerStatus;
+  isApprovedSeller: boolean;
 };
 
 function trimString(value: unknown): string | null {
@@ -20,6 +32,19 @@ function noRowError(error: MaybeError | null | undefined) {
 function duplicateError(error: MaybeError | null | undefined) {
   const message = error?.message?.toLowerCase() ?? "";
   return error?.code === "23505" || message.includes("duplicate");
+}
+
+function normalizeSellerStatus(value: unknown): SellerStatus {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "pending" ||
+    normalized === "approved" ||
+    normalized === "rejected"
+  ) {
+    return normalized;
+  }
+  return null;
 }
 
 function sellerBusinessName(user: User) {
@@ -56,11 +81,24 @@ export async function getProfileRoleWithTimeout(
   userId: string,
   timeoutMs = 4000
 ): Promise<AppRole> {
-  const rolePromise = (async () => {
+  const accessState = await getProfileAccessStateWithTimeout(
+    supabase,
+    userId,
+    timeoutMs
+  );
+  return accessState.role;
+}
+
+export async function getProfileAccessStateWithTimeout(
+  supabase: SupabaseClient,
+  userId: string,
+  timeoutMs = 4000
+): Promise<ProfileAccessState> {
+  const statePromise = (async () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, seller_status")
         .eq("id", userId)
         .maybeSingle();
 
@@ -68,18 +106,37 @@ export async function getProfileRoleWithTimeout(
         console.error("[auth] profile lookup failed:", error);
       }
 
-      return normalizeAppRole(data?.role);
+      const role = normalizeAppRole(data?.role);
+      const sellerStatus = normalizeSellerStatus(data?.seller_status);
+
+      return {
+        role,
+        sellerStatus,
+        isApprovedSeller: role === "seller" || sellerStatus === "approved",
+      };
     } catch (error: unknown) {
       console.error("[auth] profile lookup crashed:", error);
-      return null;
+      return {
+        role: null,
+        sellerStatus: null,
+        isApprovedSeller: false,
+      };
     }
   })();
 
-  const timeoutPromise = new Promise<AppRole>((resolve) => {
-    globalThis.setTimeout(() => resolve(null), timeoutMs);
+  const timeoutPromise = new Promise<ProfileAccessState>((resolve) => {
+    globalThis.setTimeout(
+      () =>
+        resolve({
+          role: null,
+          sellerStatus: null,
+          isApprovedSeller: false,
+        }),
+      timeoutMs
+    );
   });
 
-  return Promise.race([rolePromise, timeoutPromise]);
+  return Promise.race([statePromise, timeoutPromise]);
 }
 
 export async function syncProfileFromAuthUser(
@@ -88,9 +145,33 @@ export async function syncProfileFromAuthUser(
   fallbackRole?: AppRole
 ): Promise<AppRole> {
   const role = fallbackRole ?? getRoleHintFromUser(user);
+  const isSeller = role === "seller" || getRoleHintFromUser(user) === "seller";
   const displayName =
     trimString(user.user_metadata?.display_name) ??
     trimString(user.user_metadata?.full_name);
+
+  let existingRole: AppRole = null;
+  let existingSellerStatus: string | null = null;
+
+  if (isSeller) {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role, seller_status")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (error && !noRowError(error)) {
+        console.error("[auth] existing seller profile lookup failed:", error);
+      }
+
+      const existingProfile = (data ?? null) as ExistingProfileRow | null;
+      existingRole = normalizeAppRole(existingProfile?.role);
+      existingSellerStatus = normalizeSellerStatus(existingProfile?.seller_status);
+    } catch (error: unknown) {
+      console.error("[auth] existing seller profile lookup crashed:", error);
+    }
+  }
 
   const payload: Record<string, unknown> = {
     id: user.id,
@@ -108,12 +189,19 @@ export async function syncProfileFromAuthUser(
   }
 
   // For seller applicants: set seller_status and business_name
-  // but leave role unchanged (admin will promote via /admin/sellers)
-  const isSeller = role === "seller" || getRoleHintFromUser(user) === "seller";
+  // but never downgrade an already approved/rejected seller profile.
   if (isSeller) {
     payload.business_name = sellerBusinessName(user);
-    payload.seller_status = "pending";
-    payload.is_verified_seller = false;
+
+    const shouldPreserveApproval =
+      existingRole === "seller" ||
+      existingSellerStatus === "approved" ||
+      existingSellerStatus === "rejected";
+
+    if (!shouldPreserveApproval) {
+      payload.seller_status = "pending";
+      payload.is_verified_seller = false;
+    }
   }
 
   if (Object.keys(payload).length > 2) {
@@ -127,17 +215,37 @@ export async function syncProfileFromAuthUser(
   }
 
   if (isSeller) {
-    const { error: sellerAppError } = await supabase
-      .from("seller_applications")
-      .insert({
-        user_id: user.id,
-        business_name: sellerBusinessName(user),
-        status: "pending",
-        applied_at: new Date().toISOString(),
-      });
+    const shouldPreserveApproval =
+      existingRole === "seller" ||
+      existingSellerStatus === "approved" ||
+      existingSellerStatus === "rejected";
 
-    if (sellerAppError && !duplicateError(sellerAppError)) {
-      throw sellerAppError;
+    if (!shouldPreserveApproval) {
+      const { data: existingApplications, error: existingApplicationError } =
+        await supabase
+          .from("seller_applications")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1);
+
+      if (existingApplicationError) {
+        throw existingApplicationError;
+      }
+
+      if (!existingApplications || existingApplications.length === 0) {
+        const { error: sellerAppError } = await supabase
+          .from("seller_applications")
+          .insert({
+            user_id: user.id,
+            business_name: sellerBusinessName(user),
+            status: "pending",
+            applied_at: new Date().toISOString(),
+          });
+
+        if (sellerAppError && !duplicateError(sellerAppError)) {
+          throw sellerAppError;
+        }
+      }
     }
   }
 
