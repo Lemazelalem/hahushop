@@ -76,6 +76,15 @@ type StockAlert = {
   level: "out" | "low";
 };
 
+type SellerProduct = {
+  id: string;
+  name: string;
+  status: ProductStatus;
+  isActive: boolean;
+  stock: number;
+  createdAt: string | null;
+};
+
 type SellerSummary = {
   id: string;
   name: string;
@@ -97,6 +106,7 @@ type SellerSummary = {
   pendingPayoutCents: number;
   topProducts: TopProduct[];
   stockAlerts: StockAlert[];
+  productList: SellerProduct[];
 };
 
 function money(cents: number | null | undefined) {
@@ -196,16 +206,14 @@ export default function AdminApprovedSellersPage() {
       setPageError(null);
 
       try {
+        // 1) Fetch products, order_items, payouts, and seller_documents in parallel
         const [
-          { data: sellerRows, error: sellerError },
           { data: productRows, error: productError },
           { data: salesRows, error: salesError },
           { data: payoutRows, error: payoutError },
+          { data: sellerDocRows, error: sellerDocError },
+          { data: roleSellerRows, error: roleSellerError },
         ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name, full_name, phone, role")
-            .eq("role", "seller"),
           supabase
             .from("products")
             .select("id, seller_id, name, status, is_active, stock_quantity, size_variants, created_at"),
@@ -218,21 +226,58 @@ export default function AdminApprovedSellersPage() {
           supabase
             .from("seller_payouts")
             .select("id, seller_id, status, calculated_amount_cents, adjusted_amount_cents, paid_at"),
+          supabase.from("seller_documents").select("seller_id"),
+          supabase
+            .from("profiles")
+            .select("id")
+            .eq("role", "seller"),
         ]);
 
         if (!alive) return;
 
-        if (sellerError || productError || salesError || payoutError) {
+        if (productError || salesError || payoutError) {
           throw new Error(
-            sellerError?.message ||
-              productError?.message ||
+            productError?.message ||
               salesError?.message ||
               payoutError?.message ||
               "Failed to load approved seller management."
           );
         }
 
-        setSellers((sellerRows ?? []) as SellerProfile[]);
+        // 2) Collect all unique seller IDs from multiple sources
+        const sellerIdSet = new Set<string>();
+        for (const p of productRows ?? []) {
+          if (p.seller_id) sellerIdSet.add(p.seller_id);
+        }
+        for (const d of sellerDocRows ?? []) {
+          if (d.seller_id) sellerIdSet.add(d.seller_id);
+        }
+        for (const r of roleSellerRows ?? []) {
+          if (r.id) sellerIdSet.add(r.id);
+        }
+        for (const s of salesRows ?? []) {
+          if (s.seller_id) sellerIdSet.add(s.seller_id);
+        }
+        for (const pay of payoutRows ?? []) {
+          if (pay.seller_id) sellerIdSet.add(pay.seller_id);
+        }
+
+        // 3) Fetch profiles for all discovered seller IDs
+        let sellerProfiles: SellerProfile[] = [];
+        const sellerIds = Array.from(sellerIdSet);
+        if (sellerIds.length > 0) {
+          const { data: profileData, error: profileErr } = await supabase
+            .from("profiles")
+            .select("id, display_name, full_name, phone, role")
+            .in("id", sellerIds);
+
+          if (profileErr) {
+            console.error("[approved-sellers] profiles fetch error:", profileErr);
+          }
+          sellerProfiles = (profileData ?? []) as SellerProfile[];
+        }
+
+        setSellers(sellerProfiles);
         setProducts((productRows ?? []) as ProductRow[]);
         setSales((salesRows ?? []) as OrderItemRow[]);
         setPayouts((payoutRows ?? []) as PayoutRow[]);
@@ -285,6 +330,7 @@ export default function AdminApprovedSellersPage() {
     }
 
     return sellers
+      .filter((seller) => seller.role === "seller")
       .map((seller) => {
         const sellerProducts = productsBySeller[seller.id] ?? [];
         const sellerSales = salesBySeller[seller.id] ?? [];
@@ -394,6 +440,19 @@ export default function AdminApprovedSellersPage() {
             .sort((a, b) => b.revenueCents - a.revenueCents)
             .slice(0, 4),
           stockAlerts: stockAlerts.slice(0, 6),
+          productList: sellerProducts
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              status: p.status,
+              isActive: p.is_active !== false,
+              stock: getProductStock(p),
+              createdAt: p.created_at,
+            }))
+            .sort((a, b) => {
+              const order: Record<string, number> = { approved: 0, submitted: 1, draft: 2, rejected: 3, delisted: 4, archived: 5 };
+              return (order[a.status] ?? 6) - (order[b.status] ?? 6);
+            }),
         };
       })
       .sort((a, b) => b.monthlySalesCents - a.monthlySalesCents);
@@ -598,7 +657,40 @@ export default function AdminApprovedSellersPage() {
                 </div>
 
                 {expanded && (
-                  <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <div className="mt-6 space-y-4">
+                    {/* Full product list */}
+                    <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
+                      <div className="text-sm font-bold text-slate-900">Products ({seller.productList.length})</div>
+                      <div className="mt-3 space-y-2 max-h-[320px] overflow-y-auto">
+                        {seller.productList.length === 0 ? (
+                          <div className="text-sm text-slate-500">No products listed by this seller.</div>
+                        ) : (
+                          seller.productList.map((product) => (
+                            <div key={product.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
+                                <div className="text-[11px] text-slate-500">
+                                  Stock: {product.stock} &middot; Added {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : "—"}
+                                </div>
+                              </div>
+                              <span className={[
+                                "ml-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase",
+                                product.status === "approved" && product.isActive ? "bg-emerald-100 text-emerald-700" :
+                                product.status === "submitted" ? "bg-sky-100 text-sky-700" :
+                                product.status === "delisted" || !product.isActive ? "bg-rose-100 text-rose-700" :
+                                product.status === "rejected" ? "bg-red-100 text-red-700" :
+                                "bg-slate-100 text-slate-600"
+                              ].join(" ")}>
+                                {product.status === "approved" && product.isActive ? "Live" :
+                                 !product.isActive ? "Inactive" : product.status}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
                       <div className="text-sm font-bold text-slate-900">Top product performance</div>
                       <div className="mt-3 space-y-3">
@@ -654,6 +746,7 @@ export default function AdminApprovedSellersPage() {
                           ))
                         )}
                       </div>
+                    </div>
                     </div>
                   </div>
                 )}

@@ -34,6 +34,19 @@ function SignupPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // If user is already logged in and wants to sell, redirect to verification
+  useEffect(() => {
+    if (!sellerIntent) return;
+    let alive = true;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!alive || !session?.user) return;
+      // Already logged in — go directly to seller verification
+      router.replace("/seller/verification");
+    })();
+    return () => { alive = false; };
+  }, [sellerIntent, router]);
+
   function finishSignedInSignup(path: string) {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("shopease_is_logged_in", "1");
@@ -131,48 +144,105 @@ function SignupPageContent() {
         return;
       }
 
-      // 2) Update profile row (assuming row exists via trigger)
-      if (data.session?.user) {
-        const profileUpdate: Record<string, unknown> = {
-        display_name:
-          formData.displayName.trim() || formData.businessName.trim(),
-        role: selectedRole,
-        updated_at: new Date().toISOString(),
-      };
+      // Detect existing user (Supabase returns user with empty identities)
+      const isExistingUser =
+        signedUpUser.identities && signedUpUser.identities.length === 0;
 
-      if (selectedRole === "seller") {
-        profileUpdate.business_name = formData.businessName.trim();
-        profileUpdate.seller_status = "pending";
-        profileUpdate.is_verified_seller = false;
-      }
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update(profileUpdate)
-        .eq("id", signedUpUser.id);
-
-      if (profileError) {
-        console.error("Profile update error:", profileError);
-        // Non-blocking — log but continue
-      }
-
-      // 3) Create seller application if seller
-      if (selectedRole === "seller") {
-        const { error: sellerAppError } = await supabase
-          .from("seller_applications")
-          .insert({
-            user_id: signedUpUser.id,
-            business_name: formData.businessName.trim(),
-            status: "pending",
-            applied_at: new Date().toISOString(),
+      if (isExistingUser && selectedRole === "seller") {
+        // Existing customer upgrading to seller — sign them in instead
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password: formData.password,
           });
 
-        if (sellerAppError) {
-          console.error("Seller application error:", sellerAppError);
+        if (signInError) {
+          setError(
+            "An account with this email already exists. Please log in with the correct password, then apply as seller."
+          );
+          return;
         }
+
+        const existingUser = signInData.user ?? signInData.session?.user;
+        if (!existingUser) {
+          setError("Could not load your session. Please try again.");
+          return;
+        }
+
+        // Update profile for seller application (keep existing role — admin will promote)
+        await supabase
+          .from("profiles")
+          .update({
+            business_name: formData.businessName.trim(),
+            seller_status: "pending",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingUser.id);
+
+        // Update user metadata so login/callback know they applied as seller
+        await supabase.auth.updateUser({
+          data: {
+            role: "seller",
+            business_name: formData.businessName.trim(),
+          },
+        });
+
+        // Create seller application
+        await supabase.from("seller_applications").insert({
+          user_id: existingUser.id,
+          business_name: formData.businessName.trim(),
+          status: "pending",
+          applied_at: new Date().toISOString(),
+        });
+
+        finishSignedInSignup("/seller/verification");
+        return;
       }
 
-      // 4) Success — move to verify step with the submitted email
+      // 2) Update profile row (assuming row exists via trigger)
+      // NOTE: Don't set role to "seller" — admin approval is required.
+      if (data.session?.user) {
+        const profileUpdate: Record<string, unknown> = {
+          display_name:
+            formData.displayName.trim() || formData.businessName.trim(),
+          updated_at: new Date().toISOString(),
+        };
+
+        if (selectedRole === "seller") {
+          profileUpdate.business_name = formData.businessName.trim();
+          profileUpdate.seller_status = "pending";
+          profileUpdate.is_verified_seller = false;
+        } else {
+          profileUpdate.role = selectedRole;
+        }
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update(profileUpdate)
+          .eq("id", signedUpUser.id);
+
+        if (profileError) {
+          console.error("Profile update error:", profileError);
+          // Non-blocking — log but continue
+        }
+
+        // 3) Create seller application if seller
+        if (selectedRole === "seller") {
+          const { error: sellerAppError } = await supabase
+            .from("seller_applications")
+            .insert({
+              user_id: signedUpUser.id,
+              business_name: formData.businessName.trim(),
+              status: "pending",
+              applied_at: new Date().toISOString(),
+            });
+
+          if (sellerAppError) {
+            console.error("Seller application error:", sellerAppError);
+          }
+        }
+
+        // 4) Success — move to verify step with the submitted email
       }
 
       setSignedUpEmail(email);
@@ -190,7 +260,22 @@ function SignupPageContent() {
       }
 
       try {
-        await syncProfileFromAuthUser(supabase, signedUpUser, selectedRole);
+        // For seller: only bootstrap profile (without role) + create application
+        // Admin approval is required to get seller role
+        await syncProfileFromAuthUser(
+          supabase,
+          signedUpUser,
+          selectedRole === "seller" ? null : selectedRole
+        );
+        // Ensure seller application exists for email-confirm flow
+        if (selectedRole === "seller") {
+          await supabase.from("seller_applications").insert({
+            user_id: signedUpUser.id,
+            business_name: formData.businessName.trim() || signedUpUser.user_metadata?.business_name || "Seller",
+            status: "pending",
+            applied_at: new Date().toISOString(),
+          });
+        }
       } catch (profileErr) {
         console.error("[SIGNUP] profile bootstrap failed:", profileErr);
       }

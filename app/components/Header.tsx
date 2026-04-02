@@ -738,7 +738,7 @@ export default function Header() {
                               <Link href="/my-orders" onClick={() => setAccountOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors"><ShoppingBag className="w-4 h-4 text-slate-400" />My Orders</Link>
                               <Link href="/wishlist" onClick={() => setAccountOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors"><Heart className="w-4 h-4 text-slate-400" />Wishlist</Link>
                               <Link href="/profile/switch-account" onClick={() => setAccountOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors text-cyan-600"><Repeat className="w-4 h-4" />Switch Account</Link>
-                              <Link href="/auth/signup?redirect=%2Fseller" onClick={() => setAccountOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-emerald-50 transition-colors font-medium text-emerald-600"><Store className="w-4 h-4" />Start Selling<ArrowRight className="w-3 h-3 ml-auto" /></Link>
+                              <Link href="/seller/verification" onClick={() => setAccountOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-emerald-50 transition-colors font-medium text-emerald-600"><Store className="w-4 h-4" />Start Selling<ArrowRight className="w-3 h-3 ml-auto" /></Link>
                             </>
                           )}
                           {isBusinessAccount && (

@@ -18,11 +18,13 @@ type SellerRow = {
   display_name: string | null;
   full_name: string | null;
   phone: string | null;
+  role: string | null;
 };
 
 type ProductRow = {
   id: string;
   seller_id: string;
+  name: string;
   status: ProductStatus;
   is_active: boolean | null;
 };
@@ -49,6 +51,7 @@ type SellerStats = {
   totalPendingCents: number; // remaining balance
   totalPaidCents: number; // sum of paid rows
   totalOwedCents: number; // all payouts ever recorded (pending + paid)
+  productList: { id: string; name: string; status: string; isActive: boolean }[];
 };
 
 function formatMoney(cents: number | null | undefined) {
@@ -160,47 +163,73 @@ export default function AdminSellerPayoutsPage() {
       }
 
       try {
+        // 1) Fetch products, payouts, and seller_documents in parallel
         const [
-          { data: sellerData, error: sellerErr },
           { data: prodData, error: prodErr },
           { data: payoutData, error: payoutErr },
+          { data: sellerDocData, error: sellerDocErr },
+          { data: roleSellerData, error: roleSellerErr },
         ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name, full_name, phone")
-            .eq("role", "seller"),
-          supabase.from("products").select("id, seller_id, status, is_active"),
+          supabase.from("products").select("id, seller_id, name, status, is_active"),
           supabase
             .from("seller_payouts")
             .select(
               "id, seller_id, status, period_start, period_end, calculated_amount_cents, adjusted_amount_cents, paid_at"
             ),
+          supabase.from("seller_documents").select("seller_id"),
+          supabase
+            .from("profiles")
+            .select("id")
+            .eq("role", "seller"),
         ]);
 
         if (!alive || !mountedRef.current) return;
 
-        if (sellerErr) {
-          console.error("[admin payouts] seller query error:", sellerErr);
+        if (prodErr) console.error("[admin payouts] products query error:", prodErr);
+        if (payoutErr) console.error("[admin payouts] seller_payouts query error:", payoutErr);
+        if (sellerDocErr) console.error("[admin payouts] seller_documents query error:", sellerDocErr);
+        if (roleSellerErr) console.error("[admin payouts] role seller query error:", roleSellerErr);
+
+        // 2) Collect all unique seller IDs from multiple sources
+        const sellerIdSet = new Set<string>();
+        for (const p of prodData ?? []) {
+          if (p.seller_id) sellerIdSet.add(p.seller_id);
         }
-        if (prodErr) {
-          console.error("[admin payouts] products query error:", prodErr);
+        for (const d of sellerDocData ?? []) {
+          if (d.seller_id) sellerIdSet.add(d.seller_id);
         }
-        if (payoutErr) {
-          console.error(
-            "[admin payouts] seller_payouts query error:",
-            payoutErr
-          );
+        for (const r of roleSellerData ?? []) {
+          if (r.id) sellerIdSet.add(r.id);
+        }
+        for (const pay of payoutData ?? []) {
+          if (pay.seller_id) sellerIdSet.add(pay.seller_id);
         }
 
+        // 3) Fetch profiles for all discovered seller IDs
+        let sellerProfiles: SellerRow[] = [];
+        const sellerIds = Array.from(sellerIdSet);
+        if (sellerIds.length > 0) {
+          const { data: profileData, error: profileErr } = await supabase
+            .from("profiles")
+            .select("id, display_name, full_name, phone, role")
+            .in("id", sellerIds);
+
+          if (profileErr) {
+            console.error("[admin payouts] profiles fetch error:", profileErr);
+          }
+          sellerProfiles = (profileData ?? []) as SellerRow[];
+        }
+
+        if (!alive || !mountedRef.current) return;
+
         if (mountedRef.current) {
-          setSellers((sellerData ?? []) as SellerRow[]);
+          setSellers(sellerProfiles);
           setProducts((prodData ?? []) as ProductRow[]);
           setPayouts((payoutData ?? []) as PayoutRow[]);
         }
 
-        if (sellerErr || prodErr || payoutErr) {
+        if (prodErr || payoutErr) {
           const errors: string[] = [];
-          if (sellerErr) errors.push("sellers");
           if (prodErr) errors.push("products");
           if (payoutErr) errors.push("payouts");
 
@@ -249,7 +278,9 @@ export default function AdminSellerPayoutsPage() {
       payoutBySeller[pay.seller_id].push(pay);
     }
 
-    return sellers.map((s) => {
+    return sellers
+      .filter((s) => s.role === "seller")
+      .map((s) => {
       const nameCandidate =
         s.display_name?.trim() ||
         s.full_name?.trim() ||
@@ -302,6 +333,12 @@ export default function AdminSellerPayoutsPage() {
         totalPendingCents,
         totalPaidCents,
         totalOwedCents,
+        productList: prods.map((p) => ({
+          id: p.id,
+          name: p.name,
+          status: p.status,
+          isActive: p.is_active !== false,
+        })),
       };
     });
   }, [sellers, products, payouts]);
@@ -548,8 +585,9 @@ export default function AdminSellerPayoutsPage() {
             {sellerStats.map((s) => (
               <div
                 key={s.seller_id}
-                className="glass glass-ring rounded-[24px] p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                className="glass glass-ring rounded-[24px] p-4"
               >
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-slate-900 truncate">
                     {s.name}
@@ -618,6 +656,31 @@ export default function AdminSellerPayoutsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Product list */}
+              {s.productList.length > 0 && (
+                <div className="mt-3 rounded-2xl bg-white/60 border border-white/80 p-3">
+                  <div className="text-[11px] font-bold text-slate-700 mb-2">Products ({s.productList.length})</div>
+                  <div className="flex flex-wrap gap-2">
+                    {s.productList.map((prod) => (
+                      <span
+                        key={prod.id}
+                        className={[
+                          "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+                          prod.status === "approved" && prod.isActive ? "bg-emerald-50 text-emerald-700" :
+                          prod.status === "submitted" ? "bg-sky-50 text-sky-700" :
+                          prod.status === "delisted" || !prod.isActive ? "bg-rose-50 text-rose-600" :
+                          "bg-slate-100 text-slate-600"
+                        ].join(" ")}
+                      >
+                        {prod.name}
+                        <span className="text-[9px] opacity-70 uppercase">{prod.status === "approved" && prod.isActive ? "live" : !prod.isActive ? "inactive" : prod.status}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               </div>
             ))}
           </div>

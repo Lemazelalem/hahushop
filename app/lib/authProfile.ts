@@ -101,11 +101,16 @@ export async function syncProfileFromAuthUser(
     payload.display_name = displayName;
   }
 
-  if (role) {
+  // For sellers: DON'T set role — admin approval is required.
+  // Only set role for non-seller roles (customer, admin, etc.)
+  if (role && role !== "seller") {
     payload.role = role;
   }
 
-  if (role === "seller") {
+  // For seller applicants: set seller_status and business_name
+  // but leave role unchanged (admin will promote via /admin/sellers)
+  const isSeller = role === "seller" || getRoleHintFromUser(user) === "seller";
+  if (isSeller) {
     payload.business_name = sellerBusinessName(user);
     payload.seller_status = "pending";
     payload.is_verified_seller = false;
@@ -121,7 +126,7 @@ export async function syncProfileFromAuthUser(
     }
   }
 
-  if (role === "seller") {
+  if (isSeller) {
     const { error: sellerAppError } = await supabase
       .from("seller_applications")
       .insert({

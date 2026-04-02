@@ -1419,7 +1419,18 @@ function MobileAuthSheet({
 
               <button onClick={() => { onClose(); router.push("/account"); }} style={btnStyle("#0f172a", "#fff")}>My Account</button>
               <button onClick={() => { onClose(); router.push("/my-orders"); }} style={btnStyle("#f8fafc", "#0f172a")}>My Orders</button>
-              {(userRole === "customer" || !userRole) && (
+              {userRole === "customer" && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    router.push("/seller/verification");
+                  }}
+                  style={btnStyle("#ecfdf5", "#059669")}
+                >
+                  Start Selling
+                </button>
+              )}
+              {!userRole && (
                 <button
                   onClick={() => {
                     onClose();
@@ -3071,7 +3082,7 @@ function HomePageContent() {
             <div>
               <h3 className="font-bold mb-4 text-white">Make Money with Us</h3>
               <ul className="space-y-3 text-slate-400">
-                <li><Link href="/auth/signup?redirect=%2Fseller" className="hover:text-white transition-colors">Sell on HahuShop</Link></li>
+                <li><Link href={userRole === "customer" ? "/seller/verification" : "/auth/signup?redirect=%2Fseller"} className="hover:text-white transition-colors">Sell on HahuShop</Link></li>
                 <li><Link href="/specials" className="hover:text-white transition-colors">Become an Affiliate</Link></li>
                 <li><Link href="/contact" className="hover:text-white transition-colors">Advertise</Link></li>
               </ul>

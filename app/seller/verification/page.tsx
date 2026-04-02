@@ -158,6 +158,48 @@ export default function SellerVerificationPage() {
         });
       }
 
+      // 2b) Auto-apply: if a logged-in customer arrives here (upgrade path),
+      // create a seller application and set seller_status = "pending" on their profile.
+      if (nextRole !== "seller" && nextRole !== "admin") {
+        // Check if they already have an application
+        const { data: existingApp } = await supabase
+          .from("seller_applications")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!existingApp) {
+          // Create seller application
+          const businessName =
+            user.user_metadata?.business_name ||
+            user.user_metadata?.display_name ||
+            user.user_metadata?.full_name ||
+            user.email ||
+            "Seller";
+
+          await supabase.from("seller_applications").insert({
+            user_id: user.id,
+            business_name: businessName,
+            status: "pending",
+            applied_at: new Date().toISOString(),
+          });
+
+          // Update profile with seller_status and metadata
+          await supabase
+            .from("profiles")
+            .update({
+              seller_status: "pending",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", user.id);
+
+          // Update user metadata so the system knows this user applied as seller
+          await supabase.auth.updateUser({
+            data: { role: "seller" },
+          });
+        }
+      }
+
       // 3) Load existing seller documents (for this user)
       const { data, error } = await supabase
         .from("seller_documents")

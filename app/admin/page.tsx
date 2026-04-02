@@ -185,12 +185,11 @@ export default function AdminDashboard() {
         (data ?? []).filter((p: { status: ProductStatus }) => p.status === "submitted").length
       );
 
-      // Pending seller verifications
+      // Pending seller verifications (documents awaiting review)
       const { count: sellerPending, error: sellerErr } = await supabase
-        .from("profiles")
+        .from("seller_documents")
         .select("id", { count: "exact", head: true })
-        .eq("role", "seller")
-        .eq("seller_verified", false);
+        .eq("status", "pending");
 
       if (!sellerErr && sellerPending !== null) {
         setPendingSellers(sellerPending);
@@ -276,17 +275,37 @@ export default function AdminDashboard() {
           .sort((a, b) => b.revenue_cents - a.revenue_cents)
           .slice(0, 5);
 
-        // Get seller counts
-        const { count: sellersCount, error: sellersErr } = await supabase
+        // Get seller counts (multi-source: profiles.role + products.seller_id + seller_documents)
+        const sellerIdSet = new Set<string>();
+        // From products
+        const { data: prodSellers } = await supabase
+          .from("products")
+          .select("seller_id");
+        for (const p of prodSellers ?? []) {
+          if (p.seller_id) sellerIdSet.add(p.seller_id);
+        }
+        // From seller_documents
+        const { data: docSellers } = await supabase
+          .from("seller_documents")
+          .select("seller_id");
+        for (const d of docSellers ?? []) {
+          if (d.seller_id) sellerIdSet.add(d.seller_id);
+        }
+        // From profiles.role = 'seller'
+        const { data: roleSellers } = await supabase
           .from("profiles")
-          .select("id", { count: "exact", head: true })
+          .select("id")
           .eq("role", "seller");
+        for (const r of roleSellers ?? []) {
+          if (r.id) sellerIdSet.add(r.id);
+        }
+        const totalSellersCount = sellerIdSet.size;
 
-        const { count: pendingSellersCount, error: pendingSellersErr } = await supabase
-          .from("profiles")
+        // Pending seller verifications (documents awaiting review)
+        const { count: pendingSellerDocsCount } = await supabase
+          .from("seller_documents")
           .select("id", { count: "exact", head: true })
-          .eq("role", "seller")
-          .eq("seller_verified", false);
+          .eq("status", "pending");
 
         // Daily trends (last 7 days)
         const dailyTrends: { date: string; revenue: number; orders: number }[] = [];
@@ -316,8 +335,8 @@ export default function AdminDashboard() {
           totalCustomers: uniqueCustomers.size,
           newCustomersThisMonth: thisMonthCustomers.size,
           topProducts,
-          totalSellers: sellersCount || 0,
-          pendingSellers: pendingSellersCount || 0,
+          totalSellers: totalSellersCount,
+          pendingSellers: pendingSellerDocsCount || 0,
           dailyTrends
         });
 

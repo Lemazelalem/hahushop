@@ -5,45 +5,56 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-type SellerDocumentStatus = "pending" | "approved" | "rejected";
+/* ─── Types ──────────────────────────────────────────────── */
 
-type SellerDocumentRow = {
+type DocRow = {
   id: string;
   seller_id: string;
   document_type: string;
   file_url: string;
-  status: SellerDocumentStatus | string;
+  status: string;
   admin_notes: string | null;
   created_at: string;
-  reviewed_at: string | null;
-  reviewed_by: string | null;
 };
 
-type FilterKey = "all" | SellerDocumentStatus;
-
-const STATUS_CONFIG: Record<
-  SellerDocumentStatus,
-  { label: string; icon: string; badge: string }
-> = {
-  pending: {
-    label: "Pending Review",
-    icon: "⏳",
-    badge: "bg-amber-100 text-amber-800",
-  },
-  approved: {
-    label: "Approved",
-    icon: "✓",
-    badge: "bg-emerald-100 text-emerald-800",
-  },
-  rejected: {
-    label: "Rejected",
-    icon: "✕",
-    badge: "bg-rose-100 text-rose-800",
-  },
+type AppRow = {
+  id: string;
+  user_id: string;
+  business_name: string | null;
+  status: string;
+  applied_at: string | null;
 };
+
+type ProfileRow = {
+  id: string;
+  display_name: string | null;
+  full_name: string | null;
+  phone: string | null;
+  business_name: string | null;
+  role: string | null;
+  seller_status: string | null;
+};
+
+type SellerView = {
+  id: string;
+  name: string;
+  contact: string;
+  businessName: string;
+  role: string | null;
+  sellerStatus: string | null;
+  appliedAt: string | null;
+  applicationId: string | null;
+  applicationStatus: string | null;
+  productCount: number;
+  documents: DocRow[];
+  /** Computed approval state shown in UI */
+  approvalState: "pending" | "approved" | "rejected";
+};
+
+type FilterKey = "all" | "pending" | "approved" | "rejected";
 
 const FILTER_BTN: Record<
-  "pending" | "approved" | "rejected" | "all",
+  FilterKey,
   { active: string; idle: string; number: string }
 > = {
   pending: {
@@ -68,6 +79,8 @@ const FILTER_BTN: Record<
   },
 };
 
+/* ─── Page ───────────────────────────────────────────────── */
+
 export default function AdminSellerVerificationPage() {
   const router = useRouter();
 
@@ -75,12 +88,11 @@ export default function AdminSellerVerificationPage() {
   const [authorized, setAuthorized] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
 
-  const [docs, setDocs] = useState<SellerDocumentRow[]>([]);
+  const [sellers, setSellers] = useState<SellerView[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("pending");
-
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [notesInputs, setNotesInputs] = useState<Record<string, string>>({});
 
+  /* ── Load all seller data from multiple sources ── */
   useEffect(() => {
     let alive = true;
 
@@ -98,15 +110,14 @@ export default function AdminSellerVerificationPage() {
           return;
         }
 
-        const { data: profile, error: profErr } = await supabase
+        const { data: adminProfile, error: profErr } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", session.user.id)
           .maybeSingle();
 
         if (profErr) throw profErr;
-
-        if (!profile || profile.role !== "admin") {
+        if (!adminProfile || adminProfile.role !== "admin") {
           setPageError("Admin access required");
           setLoading(false);
           return;
@@ -115,28 +126,141 @@ export default function AdminSellerVerificationPage() {
         if (!alive) return;
         setAuthorized(true);
 
-        const { data, error } = await supabase
-          .from("seller_documents")
-          .select(
-            "id, seller_id, document_type, file_url, status, admin_notes, created_at, reviewed_at, reviewed_by"
-          )
-          .order("created_at", { ascending: false });
+        // Fetch all data sources in parallel
+        const [appsRes, docsRes, productsRes, profilesWithStatusRes] =
+          await Promise.all([
+            supabase
+              .from("seller_applications")
+              .select("id, user_id, business_name, status, applied_at")
+              .order("applied_at", { ascending: false }),
+            supabase
+              .from("seller_documents")
+              .select(
+                "id, seller_id, document_type, file_url, status, admin_notes, created_at"
+              )
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("products")
+              .select("seller_id"),
+            supabase
+              .from("profiles")
+              .select("id, display_name, full_name, phone, business_name, role, seller_status")
+              .or("role.eq.seller,seller_status.eq.pending,seller_status.eq.approved,seller_status.eq.rejected"),
+          ]);
 
-        if (error) throw error;
+        const apps = (appsRes.data ?? []) as AppRow[];
+        const docs = (docsRes.data ?? []) as DocRow[];
+        const products = (productsRes.data ?? []) as { seller_id: string | null }[];
+        const profilesWithStatus = (profilesWithStatusRes.data ?? []) as ProfileRow[];
 
-        const rows = (data ?? []) as SellerDocumentRow[];
+        // Collect ALL unique seller IDs
+        const sellerIdSet = new Set<string>();
+        apps.forEach((a) => sellerIdSet.add(a.user_id));
+        docs.forEach((d) => sellerIdSet.add(d.seller_id));
+        products.forEach((p) => {
+          if (p.seller_id) sellerIdSet.add(p.seller_id);
+        });
+        profilesWithStatus.forEach((p) => sellerIdSet.add(p.id));
+
+        // Remove the admin's own ID
+        sellerIdSet.delete(session.user.id);
 
         if (!alive) return;
-        setDocs(rows);
 
-        const initialNotes: Record<string, string> = {};
-        rows.forEach((d) => {
-          if (d.admin_notes) initialNotes[d.id] = d.admin_notes;
+        if (sellerIdSet.size === 0) {
+          setSellers([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch profiles for all discovered sellers
+        const sellerIds = [...sellerIdSet];
+        const { data: allProfiles } = await supabase
+          .from("profiles")
+          .select("id, display_name, full_name, phone, business_name, role, seller_status")
+          .in("id", sellerIds);
+
+        if (!alive) return;
+
+        const profileMap = new Map<string, ProfileRow>();
+        (allProfiles ?? []).forEach((p: ProfileRow) => profileMap.set(p.id, p));
+
+        // Index apps/docs/products by seller ID
+        const appMap = new Map<string, AppRow>();
+        apps.forEach((a) => {
+          if (!appMap.has(a.user_id)) appMap.set(a.user_id, a);
         });
-        setNotesInputs(initialNotes);
+
+        const docMap = new Map<string, DocRow[]>();
+        docs.forEach((d) => {
+          const list = docMap.get(d.seller_id) ?? [];
+          list.push(d);
+          docMap.set(d.seller_id, list);
+        });
+
+        const productCountMap = new Map<string, number>();
+        products.forEach((p) => {
+          if (p.seller_id) {
+            productCountMap.set(
+              p.seller_id,
+              (productCountMap.get(p.seller_id) ?? 0) + 1
+            );
+          }
+        });
+
+        // Build seller views
+        const views: SellerView[] = sellerIds.map((sid) => {
+          const profile = profileMap.get(sid);
+          const app = appMap.get(sid);
+          const sellerDocs = docMap.get(sid) ?? [];
+
+          const name =
+            profile?.display_name?.trim() ||
+            profile?.full_name?.trim() ||
+            app?.business_name?.trim() ||
+            profile?.business_name?.trim() ||
+            "Unknown";
+
+          const isRoleSeller = profile?.role === "seller";
+          const isStatusApproved =
+            profile?.seller_status === "approved" || isRoleSeller;
+          const isRejected =
+            app?.status === "rejected" ||
+            profile?.seller_status === "rejected";
+
+          let approvalState: "pending" | "approved" | "rejected" = "pending";
+          if (isStatusApproved) approvalState = "approved";
+          else if (isRejected) approvalState = "rejected";
+
+          return {
+            id: sid,
+            name,
+            contact: profile?.phone?.trim() || "No contact",
+            businessName:
+              app?.business_name?.trim() ||
+              profile?.business_name?.trim() ||
+              "",
+            role: profile?.role ?? null,
+            sellerStatus: profile?.seller_status ?? null,
+            appliedAt: app?.applied_at ?? null,
+            applicationId: app?.id ?? null,
+            applicationStatus: app?.status ?? null,
+            productCount: productCountMap.get(sid) ?? 0,
+            documents: sellerDocs,
+            approvalState,
+          };
+        });
+
+        // Sort: pending first, then rejected, then approved
+        const order = { pending: 0, rejected: 1, approved: 2 };
+        views.sort(
+          (a, b) => order[a.approvalState] - order[b.approvalState]
+        );
+
+        setSellers(views);
       } catch (err: any) {
         if (!alive) return;
-        setPageError(err?.message ?? "Failed to load seller documents.");
+        setPageError(err?.message ?? "Failed to load sellers.");
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -149,93 +273,147 @@ export default function AdminSellerVerificationPage() {
     };
   }, [router]);
 
+  /* ── Counts ── */
   const counts = useMemo(
     () => ({
-      all: docs.length,
-      pending: docs.filter((d) => d.status === "pending").length,
-      approved: docs.filter((d) => d.status === "approved").length,
-      rejected: docs.filter((d) => d.status === "rejected").length,
+      all: sellers.length,
+      pending: sellers.filter((s) => s.approvalState === "pending").length,
+      approved: sellers.filter((s) => s.approvalState === "approved").length,
+      rejected: sellers.filter((s) => s.approvalState === "rejected").length,
     }),
-    [docs]
+    [sellers]
   );
 
-  const filteredDocs = useMemo(() => {
-    if (activeFilter === "all") return docs;
-    return docs.filter((d) => d.status === activeFilter);
-  }, [docs, activeFilter]);
+  const filteredSellers = useMemo(() => {
+    if (activeFilter === "all") return sellers;
+    return sellers.filter((s) => s.approvalState === activeFilter);
+  }, [sellers, activeFilter]);
 
-  async function updateDocument(id: string, updates: Partial<SellerDocumentRow>) {
+  /* ── Approve seller: call server API to promote role + update statuses ── */
+  async function handleApprove(seller: SellerView) {
     setPageError(null);
-    setSavingId(id);
+    setSavingId(seller.id);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const pendingDocIds = seller.documents
+        .filter((d) => d.status === "pending")
+        .map((d) => d.id);
 
-      const payload = {
-        ...updates,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: session?.user?.id ?? null,
-      };
+      const res = await fetch("/api/admin/sellers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "approve",
+          sellerId: seller.id,
+          applicationId: seller.applicationId,
+          documentIds: pendingDocIds,
+        }),
+      });
 
-      const { data, error } = await supabase
-        .from("seller_documents")
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to approve seller.");
 
-      if (error) throw error;
-
-      setDocs((prev) =>
-        prev.map((d) => (d.id === id ? (data as SellerDocumentRow) : d))
+      // Update local state
+      setSellers((prev) =>
+        prev.map((s) =>
+          s.id === seller.id
+            ? {
+                ...s,
+                role: "seller",
+                sellerStatus: "approved",
+                applicationStatus: "approved",
+                approvalState: "approved" as const,
+                documents: s.documents.map((d) =>
+                  d.status === "pending" ? { ...d, status: "approved" } : d
+                ),
+              }
+            : s
+        )
       );
-
-      return data as SellerDocumentRow;
     } catch (err: any) {
-      setPageError(err?.message ?? "Failed to update document.");
-      return null;
+      setPageError(err?.message ?? "Failed to approve seller.");
     } finally {
       setSavingId(null);
     }
   }
 
-  // ✅ A) Promote seller role on approve
-  async function promoteSellerRole(sellerId: string) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: "seller" })
-      .eq("id", sellerId);
+  /* ── Reject seller ── */
+  async function handleReject(seller: SellerView) {
+    setPageError(null);
+    setSavingId(seller.id);
 
-    if (error) throw error;
-  }
+    try {
+      const res = await fetch("/api/admin/sellers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reject",
+          sellerId: seller.id,
+          applicationId: seller.applicationId,
+        }),
+      });
 
-  async function handleAction(
-    doc: SellerDocumentRow,
-    action: "approved" | "rejected" | "pending"
-  ) {
-    const updated = await updateDocument(doc.id, { status: action });
-    if (!updated) return;
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to reject seller.");
 
-    if (action === "approved") {
-      try {
-        setSavingId(doc.id);
-        await promoteSellerRole(doc.seller_id);
-      } catch (err: any) {
-        setPageError(
-          err?.message ??
-            "Document approved, but failed to update profiles.role to seller."
-        );
-      } finally {
-        setSavingId(null);
-      }
+      setSellers((prev) =>
+        prev.map((s) =>
+          s.id === seller.id
+            ? {
+                ...s,
+                sellerStatus: "rejected",
+                applicationStatus: "rejected",
+                approvalState: "rejected" as const,
+              }
+            : s
+        )
+      );
+    } catch (err: any) {
+      setPageError(err?.message ?? "Failed to reject seller.");
+    } finally {
+      setSavingId(null);
     }
   }
 
-  async function handleSaveNotes(id: string) {
-    await updateDocument(id, { admin_notes: notesInputs[id] ?? "" });
+  /* ── Revert to pending ── */
+  async function handleRevert(seller: SellerView) {
+    setPageError(null);
+    setSavingId(seller.id);
+
+    try {
+      const res = await fetch("/api/admin/sellers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "revert",
+          sellerId: seller.id,
+          applicationId: seller.applicationId,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to revert seller.");
+
+      setSellers((prev) =>
+        prev.map((s) =>
+          s.id === seller.id
+            ? {
+                ...s,
+                sellerStatus: "pending",
+                applicationStatus: "pending",
+                approvalState: "pending" as const,
+              }
+            : s
+        )
+      );
+    } catch (err: any) {
+      setPageError(err?.message ?? "Failed to revert seller.");
+    } finally {
+      setSavingId(null);
+    }
   }
+
+  /* ── Loading / Access Denied ── */
 
   if (loading) {
     return (
@@ -268,6 +446,8 @@ export default function AdminSellerVerificationPage() {
     );
   }
 
+  /* ── Main Render ── */
+
   return (
     <main className="min-h-screen px-4 py-6 md:px-8 md:py-10 bg-slate-50">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -281,11 +461,11 @@ export default function AdminSellerVerificationPage() {
                 </span>
               </div>
               <h1 className="text-3xl font-black text-slate-900">
-                Seller Verification
+                Seller Approvals
               </h1>
               <p className="text-sm text-slate-600 mt-1">
-                Approving a document also promotes the user to{" "}
-                <span className="font-semibold">profiles.role = seller</span>.
+                Review seller applications. Approving grants{" "}
+                <span className="font-semibold">seller dashboard access</span>.
               </p>
             </div>
             <button
@@ -323,7 +503,9 @@ export default function AdminSellerVerificationPage() {
                     isActive ? cfg.active : cfg.idle,
                   ].join(" ")}
                 >
-                  <div className={["text-2xl font-black", cfg.number].join(" ")}>
+                  <div
+                    className={["text-2xl font-black", cfg.number].join(" ")}
+                  >
                     {counts[stat.key]}
                   </div>
                   <div className="text-xs font-bold text-slate-500 uppercase">
@@ -335,132 +517,164 @@ export default function AdminSellerVerificationPage() {
           </div>
         </div>
 
-        {/* List */}
+        {/* Seller List */}
         <div className="space-y-4">
-          {filteredDocs.length === 0 ? (
+          {filteredSellers.length === 0 ? (
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
               <div className="text-5xl mb-4">📭</div>
               <p className="text-lg font-bold text-slate-900">
-                No documents found
+                No sellers found
               </p>
               <p className="text-sm text-slate-500">All caught up!</p>
             </div>
           ) : (
-            filteredDocs.map((doc) => {
-              const status = (doc.status as SellerDocumentStatus) || "pending";
-              const config = STATUS_CONFIG[status];
-              const isSaving = savingId === doc.id;
+            filteredSellers.map((seller) => {
+              const isSaving = savingId === seller.id;
+              const badgeCls =
+                seller.approvalState === "approved"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : seller.approvalState === "rejected"
+                  ? "bg-rose-100 text-rose-800"
+                  : "bg-amber-100 text-amber-800";
+              const badgeLabel =
+                seller.approvalState === "approved"
+                  ? "✓ Approved"
+                  : seller.approvalState === "rejected"
+                  ? "✕ Rejected"
+                  : "⏳ Pending";
 
               return (
                 <div
-                  key={doc.id}
+                  key={seller.id}
                   className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="flex flex-col lg:flex-row gap-6">
-                    {/* Info */}
+                    {/* Seller Info */}
                     <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <span
                           className={[
                             "px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide",
-                            config.badge,
+                            badgeCls,
                           ].join(" ")}
                         >
-                          {config.icon} {config.label}
+                          {badgeLabel}
                         </span>
+                        {seller.role === "seller" && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                            HAS ROLE
+                          </span>
+                        )}
                         <span className="text-xs text-slate-400 font-mono">
-                          {doc.id.slice(0, 8)}
+                          {seller.id.slice(0, 12)}…
                         </span>
                       </div>
 
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900 capitalize">
-                          {doc.document_type.replace(/_/g, " ")}
+                        <h3 className="text-lg font-bold text-slate-900">
+                          {seller.name}
                         </h3>
+                        {seller.businessName && (
+                          <p className="text-sm text-slate-600">
+                            🏪 {seller.businessName}
+                          </p>
+                        )}
                         <p className="text-sm text-slate-500">
-                          Seller:{" "}
-                          <span className="font-mono">
-                            {doc.seller_id.slice(0, 12)}...
-                          </span>
+                          📱 {seller.contact}
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs text-slate-500">
-                        <span>📅 {new Date(doc.created_at).toLocaleDateString()}</span>
-                        {doc.reviewed_at && (
+                      <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                        {seller.appliedAt && (
                           <span>
-                            ✓ Reviewed {new Date(doc.reviewed_at).toLocaleDateString()}
+                            📅 Applied{" "}
+                            {new Date(seller.appliedAt).toLocaleDateString()}
                           </span>
                         )}
+                        <span>📦 {seller.productCount} products</span>
                       </div>
 
-                      <a
-                        href={doc.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-colors"
-                      >
-                        View Document
-                      </a>
+                      {/* Documents */}
+                      {seller.documents.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">
+                            Documents ({seller.documents.length})
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {seller.documents.map((doc) => (
+                              <a
+                                key={doc.id}
+                                href={doc.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 hover:bg-slate-100 transition-colors"
+                              >
+                                📄{" "}
+                                {doc.document_type.replace(/_/g, " ")}
+                                <span
+                                  className={[
+                                    "ml-1 w-2 h-2 rounded-full inline-block",
+                                    doc.status === "approved"
+                                      ? "bg-emerald-500"
+                                      : doc.status === "rejected"
+                                      ? "bg-rose-500"
+                                      : "bg-amber-500",
+                                  ].join(" ")}
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
-                    <div className="lg:w-96 space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
-                          Admin Notes (visible to seller)
-                        </label>
-                        <textarea
-                          value={notesInputs[doc.id] ?? doc.admin_notes ?? ""}
-                          onChange={(e) =>
-                            setNotesInputs((prev) => ({
-                              ...prev,
-                              [doc.id]: e.target.value,
-                            }))
-                          }
-                          placeholder="Add notes about this document..."
-                          className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                          rows={3}
-                        />
-                        <button
-                          onClick={() => handleSaveNotes(doc.id)}
-                          disabled={isSaving}
-                          className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                        >
-                          {isSaving ? "Saving..." : "Save Notes"}
-                        </button>
-                      </div>
-
-                      {status === "pending" ? (
-                        <div className="flex gap-3">
+                    <div className="lg:w-72 space-y-3 flex flex-col justify-center">
+                      {seller.approvalState === "pending" ? (
+                        <>
                           <button
-                            onClick={() => handleAction(doc, "approved")}
+                            onClick={() => handleApprove(seller)}
                             disabled={isSaving}
-                            className="flex-1 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-50"
+                            className="w-full py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-50"
                           >
-                            ✓ Approve + Enable Seller
+                            {isSaving
+                              ? "Approving..."
+                              : "✓ Approve — Grant Seller Access"}
                           </button>
                           <button
-                            onClick={() => handleAction(doc, "rejected")}
+                            onClick={() => handleReject(seller)}
                             disabled={isSaving}
-                            className="flex-1 py-3 rounded-xl bg-rose-500 text-white font-bold text-sm shadow-lg shadow-rose-500/25 hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50"
+                            className="w-full py-3 rounded-xl bg-rose-500 text-white font-bold text-sm shadow-lg shadow-rose-500/25 hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50"
                           >
                             ✕ Reject
                           </button>
-                        </div>
-                      ) : (
+                        </>
+                      ) : seller.approvalState === "approved" ? (
                         <button
-                          onClick={() => handleAction(doc, "pending")}
+                          onClick={() => handleRevert(seller)}
                           disabled={isSaving}
                           className="w-full py-3 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm hover:bg-slate-200 transition-colors disabled:opacity-50"
                         >
                           ↩ Revert to Pending
                         </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleApprove(seller)}
+                            disabled={isSaving}
+                            className="w-full py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            ✓ Approve — Grant Seller Access
+                          </button>
+                          <button
+                            onClick={() => handleRevert(seller)}
+                            disabled={isSaving}
+                            className="w-full py-3 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm hover:bg-slate-200 transition-colors disabled:opacity-50"
+                          >
+                            ↩ Revert to Pending
+                          </button>
+                        </>
                       )}
-
-                      <div className="text-[11px] text-slate-500">
-                        Note: We auto-promote on approve. We do not auto-demote on reject/pending.
-                      </div>
                     </div>
                   </div>
                 </div>

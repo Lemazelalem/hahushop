@@ -115,16 +115,31 @@ function LoginPageContent() {
 
       const roleHint = getRoleHintFromUser(user);
 
-      void syncProfileFromAuthUser(supabase, user, roleHint).catch((profileErr) => {
-        console.error("[LOGIN] profile bootstrap failed:", profileErr);
-      });
-
+      // For non-role-based redirects, fire-and-forget sync is sufficient
       if (redirectTo && redirectTo !== "/seller" && redirectTo !== "/admin") {
+        void syncProfileFromAuthUser(supabase, user, roleHint).catch((profileErr) => {
+          console.error("[LOGIN] profile bootstrap failed:", profileErr);
+        });
         finishLogin(redirectTo);
         return;
       }
 
-      const profileRole = await getProfileRoleWithTimeout(supabase, user.id);
+      // For role-based routing: read profile first, bootstrap only if missing
+      let profileRole = await getProfileRoleWithTimeout(supabase, user.id);
+
+      // If no profile at all, create one (without seller role — admin approval required)
+      if (!profileRole && roleHint) {
+        try {
+          await syncProfileFromAuthUser(supabase, user, roleHint);
+          // syncProfileFromAuthUser no longer sets role='seller',
+          // so profileRole stays null for seller applicants
+          if (roleHint !== "seller") {
+            profileRole = roleHint;
+          }
+        } catch (profileErr) {
+          console.error("[LOGIN] profile bootstrap failed:", profileErr);
+        }
+      }
 
       if (redirectTo === "/admin") {
         if (profileRole !== "admin") {
