@@ -90,6 +90,14 @@ type SoldItem = {
   order_payment_status: string;
 };
 
+type PayoutBankForm = {
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+  branch: string;
+  notes: string;
+};
+
 export default function SellerDashboardPage() {
   const router = useRouter();
 
@@ -122,6 +130,15 @@ export default function SellerDashboardPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [newSaleCount, setNewSaleCount] = useState(0);
+  const [bankSaving, setBankSaving] = useState(false);
+  const [bankSaveMsg, setBankSaveMsg] = useState<string | null>(null);
+  const [bankForm, setBankForm] = useState<PayoutBankForm>({
+    bankName: "",
+    accountHolder: "",
+    accountNumber: "",
+    branch: "",
+    notes: "",
+  });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -138,6 +155,13 @@ export default function SellerDashboardPage() {
       }
 
       setSignedInAs(user.id);
+      setBankForm({
+        bankName: String(user.user_metadata?.payout_bank_name ?? ""),
+        accountHolder: String(user.user_metadata?.payout_account_holder ?? ""),
+        accountNumber: String(user.user_metadata?.payout_account_number ?? ""),
+        branch: String(user.user_metadata?.payout_bank_branch ?? ""),
+        notes: String(user.user_metadata?.payout_bank_notes ?? ""),
+      });
 
       // Check role
       const { data: profile, error: profileError } = await supabase
@@ -403,6 +427,31 @@ export default function SellerDashboardPage() {
       },
     };
     return configs[status] || configs.draft;
+  };
+
+  const saveBankInfo = async () => {
+    setBankSaving(true);
+    setBankSaveMsg(null);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          payout_bank_name: bankForm.bankName.trim() || null,
+          payout_account_holder: bankForm.accountHolder.trim() || null,
+          payout_account_number: bankForm.accountNumber.trim() || null,
+          payout_bank_branch: bankForm.branch.trim() || null,
+          payout_bank_notes: bankForm.notes.trim() || null,
+        },
+      });
+
+      if (error) throw error;
+      setBankSaveMsg("Bank details saved.");
+    } catch (err: any) {
+      console.error(err);
+      setBankSaveMsg(err?.message || "Failed to save bank details.");
+    } finally {
+      setBankSaving(false);
+    }
   };
 
   const renderVerificationCard = () => {
@@ -692,6 +741,101 @@ export default function SellerDashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Payout Bank Information */}
+        <section className="glass-card rounded-2xl p-5 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Payout Bank Information</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Add your Ethiopian bank details so admin can process your payouts correctly.
+              </p>
+            </div>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Seller Payout Details
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank Name</span>
+              <input
+                type="text"
+                value={bankForm.bankName}
+                onChange={(e) =>
+                  setBankForm((prev) => ({ ...prev, bankName: e.target.value }))
+                }
+                placeholder="Example: Commercial Bank of Ethiopia"
+                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Holder Name</span>
+              <input
+                type="text"
+                value={bankForm.accountHolder}
+                onChange={(e) =>
+                  setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))
+                }
+                placeholder="Name on bank account"
+                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Number</span>
+              <input
+                type="text"
+                value={bankForm.accountNumber}
+                onChange={(e) =>
+                  setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))
+                }
+                placeholder="Enter bank account number"
+                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Branch (Optional)</span>
+              <input
+                type="text"
+                value={bankForm.branch}
+                onChange={(e) =>
+                  setBankForm((prev) => ({ ...prev, branch: e.target.value }))
+                }
+                placeholder="Example: Bole Branch"
+                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Payout Notes (Optional)</span>
+              <textarea
+                value={bankForm.notes}
+                onChange={(e) =>
+                  setBankForm((prev) => ({ ...prev, notes: e.target.value }))
+                }
+                rows={3}
+                placeholder="Any extra details for payout processing"
+                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              onClick={saveBankInfo}
+              disabled={bankSaving}
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {bankSaving ? "Saving..." : "Save Bank Information"}
+            </button>
+            {bankSaveMsg && (
+              <p className="text-sm text-slate-600">{bankSaveMsg}</p>
+            )}
           </div>
         </section>
 
