@@ -109,14 +109,6 @@ type SellerSummary = {
   productList: SellerProduct[];
 };
 
-function money(cents: number | null | undefined) {
-  if (!cents || cents <= 0) return "ETB 0.00";
-  return `ETB ${(cents / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function moneyCompact(cents: number | null | undefined) {
   if (!cents || cents <= 0) return "ETB 0";
   const value = cents / 100;
@@ -206,12 +198,11 @@ export default function AdminApprovedSellersPage() {
       setPageError(null);
 
       try {
-        // 1) Fetch products, order_items, payouts, and seller_documents in parallel
         const [
           { data: productRows, error: productError },
           { data: salesRows, error: salesError },
           { data: payoutRows, error: payoutError },
-          { data: sellerDocRows, error: sellerDocError },
+          { data: sellerDocRows },
         ] = await Promise.all([
           supabase
             .from("products")
@@ -239,7 +230,6 @@ export default function AdminApprovedSellersPage() {
           );
         }
 
-        // 2) Collect all unique seller IDs from multiple sources
         const sellerIdSet = new Set<string>();
         for (const p of productRows ?? []) {
           if (p.seller_id) sellerIdSet.add(p.seller_id);
@@ -254,11 +244,8 @@ export default function AdminApprovedSellersPage() {
           if (pay.seller_id) sellerIdSet.add(pay.seller_id);
         }
 
-        // 3) Fetch profiles via server API (bypasses RLS on profiles table)
         let sellerProfiles: SellerProfile[] = [];
-        const sellerIds = Array.from(sellerIdSet);
 
-        // Fetch seller-role profiles via API (discovers sellers not in other tables)
         const roleRes = await fetch("/api/admin/profiles?role=seller");
         if (roleRes.ok) {
           const roleData = await roleRes.json();
@@ -267,7 +254,6 @@ export default function AdminApprovedSellersPage() {
           }
         }
 
-        // Fetch full profiles for all discovered seller IDs
         const allSellerIds = Array.from(sellerIdSet);
         if (allSellerIds.length > 0) {
           const profRes = await fetch(`/api/admin/profiles?ids=${allSellerIds.join(",")}`);
@@ -400,6 +386,7 @@ export default function AdminApprovedSellersPage() {
         }
 
         const stockAlerts: StockAlert[] = sellerProducts
+          .filter((p) => p.status !== "delisted" && p.is_active !== false)
           .map((product) => {
             const stock = getProductStock(product);
             if (stock <= 0) {
@@ -505,91 +492,58 @@ export default function AdminApprovedSellersPage() {
   if (!isAdmin) return null;
 
   return (
-    <main className="py-4 md:py-6 space-y-6">
-      <section className="glass glass-ring rounded-[28px] p-6 md:p-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <main className="py-4 md:py-6 space-y-4">
+      {/* Compact header */}
+      <section className="glass glass-ring rounded-[28px] p-5 md:p-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-              Admin
-            </div>
-            <h1 className="mt-1 text-3xl font-bold text-slate-900 md:text-4xl">
-              Approved Sellers
-            </h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-700 md:text-base">
-              Manage approved sellers with daily sales, pending customer payments,
-              payout exposure, stock health, and product performance in one place.
-            </p>
+            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Admin</div>
+            <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Approved Sellers</h1>
           </div>
-
           <button
             onClick={() => router.push("/admin")}
-            className="pill px-5 py-2 text-sm font-semibold text-slate-900"
+            className="pill px-4 py-1.5 text-sm font-semibold text-slate-900 shrink-0"
           >
             Back to Admin
           </button>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-6">
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Sellers
-            </div>
-            <div className="mt-1 text-3xl font-bold text-slate-900">
-              {sellerSummaries.length}
-            </div>
-          </div>
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Today Sales
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
-              {moneyCompact(totals.dailySalesCents)}
-            </div>
-          </div>
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              7 Day Sales
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
-              {moneyCompact(totals.weeklySalesCents)}
-            </div>
-          </div>
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Pending Customer Pay
-            </div>
-            <div className="mt-1 text-2xl font-bold text-amber-900">
-              {moneyCompact(totals.pendingPaymentCents)}
-            </div>
-          </div>
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Pending Payout
-            </div>
-            <div className="mt-1 text-2xl font-bold text-rose-700">
-              {moneyCompact(totals.pendingPayoutCents)}
-            </div>
-          </div>
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Stock Alerts
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
-              {totals.outOfStockCount + totals.lowStockCount}
-            </div>
-            <div className="mt-1 text-[11px] text-slate-500">
-              {totals.outOfStockCount} out, {totals.lowStockCount} low
-            </div>
-          </div>
+        {/* Compact summary strip */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="font-semibold text-slate-900">{sellerSummaries.length} sellers</span>
+          <span className="text-slate-500">
+            Today <span className="font-semibold text-slate-800">{moneyCompact(totals.dailySalesCents)}</span>
+          </span>
+          <span className="text-slate-500">
+            7d <span className="font-semibold text-slate-800">{moneyCompact(totals.weeklySalesCents)}</span>
+          </span>
+          <span className="text-slate-500">
+            Month <span className="font-semibold text-slate-800">{moneyCompact(totals.monthlySalesCents)}</span>
+          </span>
+          {totals.pendingPaymentCents > 0 && (
+            <span className="text-amber-700">
+              Pending pay <span className="font-semibold">{moneyCompact(totals.pendingPaymentCents)}</span>
+            </span>
+          )}
+          {totals.pendingPayoutCents > 0 && (
+            <span className="text-rose-700">
+              Pending payout <span className="font-semibold">{moneyCompact(totals.pendingPayoutCents)}</span>
+            </span>
+          )}
+          {(totals.outOfStockCount + totals.lowStockCount) > 0 && (
+            <span className="text-rose-600">
+              {totals.outOfStockCount} out · {totals.lowStockCount} low stock
+            </span>
+          )}
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search approved sellers by name, phone, or email..."
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300"
+            placeholder="Search by name or phone..."
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300"
           />
         </div>
       </section>
@@ -602,151 +556,280 @@ export default function AdminApprovedSellersPage() {
 
       {loading ? (
         <div className="glass glass-ring rounded-[28px] p-8 text-center text-sm text-slate-500">
-          Loading approved seller management...
+          Loading seller data...
         </div>
       ) : filteredSellers.length === 0 ? (
         <div className="glass glass-ring rounded-[28px] p-10 text-center">
-          <div className="text-lg font-bold text-slate-900">No approved sellers found</div>
+          <div className="text-lg font-bold text-slate-900">No sellers found</div>
           <div className="mt-1 text-sm text-slate-500">
             Try a different search or approve seller documents first.
           </div>
         </div>
       ) : (
-        <section className="space-y-4">
+        <section className="glass glass-ring rounded-[28px] divide-y divide-slate-100 overflow-hidden">
           {filteredSellers.map((seller) => {
             const expanded = expandedSellerId === seller.id;
+
             return (
-              <article key={seller.id} className="glass glass-ring rounded-[28px] p-5 md:p-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-xl font-bold text-slate-900">{seller.name}</h2>
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
-                        Approved Seller
+              <article key={seller.id}>
+                {/* Compact collapsed row */}
+                <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-semibold text-slate-900 text-sm">{seller.name}</span>
+                      <span className="text-xs text-slate-400">{seller.contact}</span>
+                      {seller.pendingPaymentCents > 0 && (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          pay pending
+                        </span>
+                      )}
+                      {seller.outOfStockCount > 0 && (
+                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                          {seller.outOfStockCount} out of stock
+                        </span>
+                      )}
+                      {seller.lowStockCount > 0 && (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          {seller.lowStockCount} low stock
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-500">
+                      {seller.approvedProducts > 0 && (
+                        <span className="text-emerald-700 font-medium">{seller.approvedProducts} live</span>
+                      )}
+                      {seller.submittedProducts > 0 && (
+                        <span className="text-sky-700 font-medium">{seller.submittedProducts} pending</span>
+                      )}
+                      {seller.delistedProducts > 0 && (
+                        <span className="text-slate-400">{seller.delistedProducts} delisted</span>
+                      )}
+                      {seller.totalProducts === 0 && (
+                        <span className="text-slate-400">No products</span>
+                      )}
+                      <span className="text-slate-300">·</span>
+                      <span>
+                        Month{" "}
+                        <span className="font-semibold text-slate-700">
+                          {moneyCompact(seller.monthlySalesCents)}
+                        </span>{" "}
+                        <span className="text-slate-400">({seller.monthlyOrders} orders)</span>
                       </span>
                     </div>
-                    <div className="mt-1 text-sm text-slate-500">{seller.contact}</div>
                   </div>
-
                   <button
-                    onClick={() =>
-                      setExpandedSellerId((current) => (current === seller.id ? null : seller.id))
-                    }
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() => setExpandedSellerId(expanded ? null : seller.id)}
+                    className="shrink-0 text-xs font-semibold text-slate-600 border border-slate-200 bg-white rounded-xl px-3 py-1.5 hover:bg-slate-50 transition-colors"
                   >
-                    {expanded ? "Hide details" : "View details"}
+                    {expanded ? "Hide ↑" : "Details ↓"}
                   </button>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-6">
-                  <MetricCard label="Today" value={moneyCompact(seller.dailySalesCents)} sub={`${seller.dailyOrders} orders`} />
-                  <MetricCard label="7 Days" value={moneyCompact(seller.weeklySalesCents)} sub={`${seller.weeklyOrders} orders`} />
-                  <MetricCard label="This Month" value={moneyCompact(seller.monthlySalesCents)} sub={`${seller.monthlyOrders} orders`} />
-                  <MetricCard label="Pending Payment" value={moneyCompact(seller.pendingPaymentCents)} sub="Customer money not paid yet" tone="amber" />
-                  <MetricCard label="Pending Payout" value={moneyCompact(seller.pendingPayoutCents)} sub="Admin still owes seller" tone="rose" />
-                  <MetricCard label="Paid Out" value={moneyCompact(seller.paidPayoutCents)} sub="Recorded seller payouts" tone="emerald" />
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-6">
-                  <MetricCard label="Total Products" value={String(seller.totalProducts)} sub="All listings" compact />
-                  <MetricCard label="Approved" value={String(seller.approvedProducts)} sub="Live products" compact tone="emerald" />
-                  <MetricCard label="Submitted" value={String(seller.submittedProducts)} sub="Need review" compact tone="sky" />
-                  <MetricCard label="Delisted" value={String(seller.delistedProducts)} sub="Inactive/delisted" compact tone="amber" />
-                  <MetricCard label="Out of Stock" value={String(seller.outOfStockCount)} sub="Immediate attention" compact tone="rose" />
-                  <MetricCard label="Low Stock" value={String(seller.lowStockCount)} sub="5 or fewer units" compact tone="amber" />
-                </div>
-
+                {/* Expanded panel */}
                 {expanded && (
-                  <div className="mt-6 space-y-4">
-                    {/* Full product list */}
-                    <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
-                      <div className="text-sm font-bold text-slate-900">Products ({seller.productList.length})</div>
-                      <div className="mt-3 space-y-2 max-h-[320px] overflow-y-auto">
+                  <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4 space-y-3">
+                    {/* Compact 6-cell financials grid */}
+                    <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 text-center">
+                      {[
+                        {
+                          label: "Today",
+                          value: moneyCompact(seller.dailySalesCents),
+                          sub: `${seller.dailyOrders} orders`,
+                          cls: "bg-white border-slate-200 text-slate-900",
+                        },
+                        {
+                          label: "7 Days",
+                          value: moneyCompact(seller.weeklySalesCents),
+                          sub: `${seller.weeklyOrders} orders`,
+                          cls: "bg-white border-slate-200 text-slate-900",
+                        },
+                        {
+                          label: "Month",
+                          value: moneyCompact(seller.monthlySalesCents),
+                          sub: `${seller.monthlyOrders} orders`,
+                          cls: "bg-white border-slate-200 text-slate-900",
+                        },
+                        {
+                          label: "Pending Pay",
+                          value: moneyCompact(seller.pendingPaymentCents),
+                          sub: "customer unpaid",
+                          cls: "bg-amber-50 border-amber-100 text-amber-900",
+                        },
+                        {
+                          label: "Pending Payout",
+                          value: moneyCompact(seller.pendingPayoutCents),
+                          sub: "owed to seller",
+                          cls: "bg-rose-50 border-rose-100 text-rose-900",
+                        },
+                        {
+                          label: "Paid Out",
+                          value: moneyCompact(seller.paidPayoutCents),
+                          sub: "recorded",
+                          cls: "bg-emerald-50 border-emerald-100 text-emerald-900",
+                        },
+                      ].map(({ label, value, sub, cls }) => (
+                        <div key={label} className={`rounded-2xl border p-2.5 ${cls}`}>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            {label}
+                          </div>
+                          <div className="text-sm font-bold mt-0.5">{value}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Products collapsible */}
+                    <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
+                      <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
+                        <span className="text-sm font-semibold text-slate-900">
+                          Products{" "}
+                          <span className="font-normal text-slate-400">({seller.productList.length})</span>
+                        </span>
+                        <svg
+                          className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </summary>
+                      <div className="border-t border-slate-100 max-h-60 overflow-y-auto divide-y divide-slate-50">
                         {seller.productList.length === 0 ? (
-                          <div className="text-sm text-slate-500">No products listed by this seller.</div>
+                          <p className="px-4 py-3 text-sm text-slate-400">No products.</p>
                         ) : (
                           seller.productList.map((product) => (
-                            <div key={product.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2.5">
+                            <div
+                              key={product.id}
+                              className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
+                            >
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-semibold text-slate-900">{product.name}</div>
-                                <div className="text-[11px] text-slate-500">
-                                  Stock: {product.stock} &middot; Added {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : "—"}
-                                </div>
-                              </div>
-                              <span className={[
-                                "ml-2 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase",
-                                product.status === "approved" && product.isActive ? "bg-emerald-100 text-emerald-700" :
-                                product.status === "submitted" ? "bg-sky-100 text-sky-700" :
-                                product.status === "delisted" || !product.isActive ? "bg-rose-100 text-rose-700" :
-                                product.status === "rejected" ? "bg-red-100 text-red-700" :
-                                "bg-slate-100 text-slate-600"
-                              ].join(" ")}>
-                                {product.status === "approved" && product.isActive ? "Live" :
-                                 !product.isActive ? "Inactive" : product.status}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
-                      <div className="text-sm font-bold text-slate-900">Top product performance</div>
-                      <div className="mt-3 space-y-3">
-                        {seller.topProducts.length === 0 ? (
-                          <div className="text-sm text-slate-500">No sales recorded yet for this seller.</div>
-                        ) : (
-                          seller.topProducts.map((product, index) => (
-                            <div key={`${seller.id}-${product.productId}-${index}`} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold text-slate-900">
-                                  {product.name}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {product.unitsSold} sold
-                                </div>
-                              </div>
-                              <div className="text-right text-sm font-bold text-slate-900">
-                                {moneyCompact(product.revenueCents)}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
-                      <div className="text-sm font-bold text-slate-900">Stock alerts</div>
-                      <div className="mt-3 space-y-3">
-                        {seller.stockAlerts.length === 0 ? (
-                          <div className="text-sm text-slate-500">No low-stock or out-of-stock products right now.</div>
-                        ) : (
-                          seller.stockAlerts.map((alert) => (
-                            <div key={`${seller.id}-${alert.id}`} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold text-slate-900">
-                                  {alert.name}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {alert.level === "out" ? "Out of stock" : "Low stock"}
+                                <div className="text-sm text-slate-900 truncate">{product.name}</div>
+                                <div className="text-[11px] text-slate-400">
+                                  Stock: {product.stock} ·{" "}
+                                  {product.createdAt
+                                    ? new Date(product.createdAt).toLocaleDateString()
+                                    : "—"}
                                 </div>
                               </div>
                               <span
                                 className={[
-                                  "rounded-full px-2.5 py-1 text-[11px] font-bold",
-                                  alert.level === "out"
+                                  "ml-3 shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
+                                  product.status === "approved" && product.isActive
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : product.status === "submitted"
+                                    ? "bg-sky-100 text-sky-700"
+                                    : product.status === "delisted" || !product.isActive
                                     ? "bg-rose-100 text-rose-700"
-                                    : "bg-amber-100 text-amber-700",
+                                    : product.status === "rejected"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-slate-100 text-slate-500",
                                 ].join(" ")}
                               >
-                                {alert.stock} left
+                                {product.status === "approved" && product.isActive
+                                  ? "Live"
+                                  : !product.isActive
+                                  ? "Inactive"
+                                  : product.status}
                               </span>
                             </div>
                           ))
                         )}
                       </div>
-                    </div>
+                    </details>
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {/* Top products collapsible */}
+                      <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
+                        <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
+                          <span className="text-sm font-semibold text-slate-900">
+                            Top Products{" "}
+                            <span className="font-normal text-slate-400">({seller.topProducts.length})</span>
+                          </span>
+                          <svg
+                            className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </summary>
+                        <div className="border-t border-slate-100 divide-y divide-slate-50">
+                          {seller.topProducts.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-slate-400">No sales yet.</p>
+                          ) : (
+                            seller.topProducts.map((product, i) => (
+                              <div
+                                key={`${seller.id}-${product.productId}-${i}`}
+                                className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-sm text-slate-900 truncate">{product.name}</div>
+                                  <div className="text-[11px] text-slate-400">{product.unitsSold} sold</div>
+                                </div>
+                                <div className="text-sm font-semibold text-slate-900 ml-3 shrink-0">
+                                  {moneyCompact(product.revenueCents)}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </details>
+
+                      {/* Stock alerts collapsible */}
+                      <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
+                        <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-900">Stock Alerts</span>
+                            {seller.stockAlerts.length > 0 && (
+                              <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                                {seller.stockAlerts.length}
+                              </span>
+                            )}
+                          </div>
+                          <svg
+                            className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </summary>
+                        <div className="border-t border-slate-100 divide-y divide-slate-50">
+                          {seller.stockAlerts.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-slate-400">No stock issues.</p>
+                          ) : (
+                            seller.stockAlerts.map((alert) => (
+                              <div
+                                key={`${seller.id}-${alert.id}`}
+                                className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-sm text-slate-900 truncate">{alert.name}</div>
+                                  <div className="text-[11px] text-slate-400">
+                                    {alert.level === "out" ? "Out of stock" : "Low stock"}
+                                  </div>
+                                </div>
+                                <span
+                                  className={[
+                                    "text-[10px] font-bold px-2 py-0.5 rounded-full ml-3 shrink-0",
+                                    alert.level === "out"
+                                      ? "bg-rose-100 text-rose-700"
+                                      : "bg-amber-100 text-amber-700",
+                                  ].join(" ")}
+                                >
+                                  {alert.stock} left
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </details>
                     </div>
                   </div>
                 )}
@@ -756,39 +839,5 @@ export default function AdminApprovedSellersPage() {
         </section>
       )}
     </main>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  sub,
-  tone = "slate",
-  compact = false,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  tone?: "slate" | "emerald" | "amber" | "rose" | "sky";
-  compact?: boolean;
-}) {
-  const tones: Record<string, string> = {
-    slate: "text-slate-900 bg-white/70 border-slate-200",
-    emerald: "text-emerald-900 bg-emerald-50 border-emerald-200",
-    amber: "text-amber-900 bg-amber-50 border-amber-200",
-    rose: "text-rose-900 bg-rose-50 border-rose-200",
-    sky: "text-sky-900 bg-sky-50 border-sky-200",
-  };
-
-  return (
-    <div className={["rounded-[22px] border p-4", tones[tone]].join(" ")}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className={compact ? "mt-2 text-2xl font-bold" : "mt-2 text-3xl font-bold"}>
-        {value}
-      </div>
-      <div className="mt-1 text-[11px] text-slate-500">{sub}</div>
-    </div>
   );
 }

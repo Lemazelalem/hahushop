@@ -1,4 +1,4 @@
-// app/admin/payouts/page.tsx
+﻿// app/admin/payouts/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -40,6 +40,15 @@ type PayoutRow = {
   paid_at: string | null;
 };
 
+type PayoutHistoryItem = {
+  id: string;
+  amountCents: number;
+  status: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string | null;
+};
+
 type SellerStats = {
   seller_id: string;
   name: string;
@@ -48,10 +57,12 @@ type SellerStats = {
   submitted: number;
   approved: number;
   delisted: number;
-  totalPendingCents: number; // remaining balance
-  totalPaidCents: number; // sum of paid rows
-  totalOwedCents: number; // all payouts ever recorded (pending + paid)
+  totalPendingCents: number;
+  totalPaidCents: number;
+  totalOwedCents: number;
+  payoutCount: number;
   productList: { id: string; name: string; status: string; isActive: boolean }[];
+  payoutHistory: PayoutHistoryItem[];
 };
 
 function formatMoney(cents: number | null | undefined) {
@@ -59,9 +70,30 @@ function formatMoney(cents: number | null | undefined) {
   return `ETB ${(cents / 100).toFixed(2)}`;
 }
 
+function formatMoneyCompact(cents: number | null | undefined) {
+  if (!cents || cents <= 0) return "ETB 0";
+  const value = cents / 100;
+  if (value >= 1_000_000) return `ETB ${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `ETB ${(value / 1_000).toFixed(1)}K`;
+  return `ETB ${value.toFixed(0)}`;
+}
+
 // helpers to build YYYY-MM-DD
 function formatDateYYYYMMDD(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function formatPeriod(start: string | null, end: string | null) {
+  if (start && end) {
+    return `${new Date(start).toLocaleDateString()} to ${new Date(end).toLocaleDateString()}`;
+  }
+  if (start) return `From ${new Date(start).toLocaleDateString()}`;
+  if (end) return `Until ${new Date(end).toLocaleDateString()}`;
+  return "No period recorded";
+}
+
+function getAmountCents(payout: PayoutRow) {
+  return payout.adjusted_amount_cents ?? payout.calculated_amount_cents ?? 0;
 }
 
 export default function AdminSellerPayoutsPage() {
@@ -80,6 +112,8 @@ export default function AdminSellerPayoutsPage() {
 
   // reload key to re-run the loader after recording a payout
   const [reloadKey, setReloadKey] = useState(0);
+  const [search, setSearch] = useState("");
+  const [expandedSellerId, setExpandedSellerId] = useState<string | null>(null);
 
   // modal state
   const [activeSeller, setActiveSeller] = useState<SellerStats | null>(null);
@@ -279,67 +313,135 @@ export default function AdminSellerPayoutsPage() {
     return sellers
       .filter((s) => s.role === "seller")
       .map((s) => {
-      const nameCandidate =
-        s.display_name?.trim() ||
-        s.full_name?.trim() ||
-        (s.phone ? s.phone.trim() : "") ||
-        "Seller";
+        const nameCandidate =
+          s.display_name?.trim() ||
+          s.full_name?.trim() ||
+          (s.phone ? s.phone.trim() : "") ||
+          "Seller";
 
-      const contact = s.phone?.trim() || "";
+        const contact = s.phone?.trim() || "No contact";
+        const prods = productBySeller[s.id] ?? [];
+        const pays = payoutBySeller[s.id] ?? [];
 
-      const prods = productBySeller[s.id] ?? [];
-      const pays = payoutBySeller[s.id] ?? [];
+        const totalProducts = prods.length;
+        const submitted = prods.filter((p) => p.status === "submitted").length;
+        const approved = prods.filter(
+          (p) => p.status === "approved" && p.is_active !== false
+        ).length;
+        const delisted = prods.filter(
+          (p) => p.status === "delisted" || p.is_active === false
+        ).length;
 
-      const totalProducts = prods.length;
-      const submitted = prods.filter((p) => p.status === "submitted").length;
-      const approved = prods.filter((p) => p.status === "approved").length;
-      const delisted = prods.filter(
-        (p) => p.status === "delisted" || p.is_active === false
-      ).length;
+        let pendingFromRows = 0;
+        let totalPaidCents = 0;
 
-      // payout math
-      let pendingFromRows = 0; // sum of non-paid payout rows (accruals)
-      let totalPaidCents = 0; // sum of paid rows
+        for (const pay of pays) {
+          const amount = getAmountCents(pay);
+          if (!amount || amount <= 0) continue;
 
-      for (const pay of pays) {
-        const amount =
-          pay.adjusted_amount_cents ?? pay.calculated_amount_cents ?? 0;
-        if (!amount || amount <= 0) continue;
-
-        const status = (pay.status || "").toLowerCase();
-        if (status === "paid") {
-          totalPaidCents += amount;
-        } else {
-          pendingFromRows += amount;
+          if ((pay.status || "").toLowerCase() === "paid") {
+            totalPaidCents += amount;
+          } else {
+            pendingFromRows += amount;
+          }
         }
-      }
 
-      // "payout record" (lifetime total) = all accruals + all payments
-      const totalOwedCents = pendingFromRows + totalPaidCents;
+        const totalOwedCents = pendingFromRows + totalPaidCents;
+        const totalPendingCents = Math.max(pendingFromRows - totalPaidCents, 0);
 
-      // remaining balance = accruals - payments, never below 0
-      const totalPendingCents = Math.max(pendingFromRows - totalPaidCents, 0);
+        const payoutHistory = pays
+          .map((pay) => ({
+            id: pay.id,
+            amountCents: getAmountCents(pay),
+            status: (pay.status || "unknown").toLowerCase(),
+            periodStart: pay.period_start,
+            periodEnd: pay.period_end,
+            paidAt: pay.paid_at,
+          }))
+          .sort((a, b) => {
+            const aDate = a.paidAt || a.periodEnd || a.periodStart || "";
+            const bDate = b.paidAt || b.periodEnd || b.periodStart || "";
+            return bDate.localeCompare(aDate);
+          });
 
-      return {
-        seller_id: s.id,
-        name: nameCandidate,
-        contact,
-        totalProducts,
-        submitted,
-        approved,
-        delisted,
-        totalPendingCents,
-        totalPaidCents,
-        totalOwedCents,
-        productList: prods.map((p) => ({
-          id: p.id,
-          name: p.name,
-          status: p.status,
-          isActive: p.is_active !== false,
-        })),
-      };
-    });
+        const productList = prods
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            status: p.status,
+            isActive: p.is_active !== false,
+          }))
+          .sort((a, b) => {
+            const order: Record<string, number> = {
+              approved: 0,
+              submitted: 1,
+              draft: 2,
+              rejected: 3,
+              delisted: 4,
+              archived: 5,
+            };
+            return (order[a.status] ?? 6) - (order[b.status] ?? 6);
+          });
+
+        return {
+          seller_id: s.id,
+          name: nameCandidate,
+          contact,
+          totalProducts,
+          submitted,
+          approved,
+          delisted,
+          totalPendingCents,
+          totalPaidCents,
+          totalOwedCents,
+          payoutCount: payoutHistory.length,
+          productList,
+          payoutHistory,
+        };
+      })
+      .sort((a, b) => {
+        if (b.totalPendingCents !== a.totalPendingCents) {
+          return b.totalPendingCents - a.totalPendingCents;
+        }
+        return b.totalPaidCents - a.totalPaidCents;
+      });
   }, [sellers, products, payouts]);
+
+  const filteredSellerStats = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return sellerStats;
+
+    return sellerStats.filter(
+      (seller) =>
+        seller.name.toLowerCase().includes(query) ||
+        seller.contact.toLowerCase().includes(query) ||
+        seller.productList.some((product) =>
+          product.name.toLowerCase().includes(query)
+        )
+    );
+  }, [search, sellerStats]);
+
+  const filteredTotals = useMemo(() => {
+    return filteredSellerStats.reduce(
+      (acc, seller) => {
+        acc.pendingCents += seller.totalPendingCents;
+        acc.paidCents += seller.totalPaidCents;
+        acc.recordedCents += seller.totalOwedCents;
+        acc.products += seller.totalProducts;
+        acc.payoutRows += seller.payoutCount;
+        if (seller.totalPendingCents > 0) acc.sellersWithPending += 1;
+        return acc;
+      },
+      {
+        pendingCents: 0,
+        paidCents: 0,
+        recordedCents: 0,
+        products: 0,
+        payoutRows: 0,
+        sellersWithPending: 0,
+      }
+    );
+  }, [filteredSellerStats]);
 
   // ------------------------------
   // MODAL: open / close / submit
@@ -362,6 +464,21 @@ export default function AdminSellerPayoutsPage() {
     setModalAmount("");
     setModalError(null);
   }
+
+  useEffect(() => {
+    if (!activeSeller) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeRecordModal();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeSeller, modalSaving]);
 
   async function handleRecordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -462,313 +579,421 @@ export default function AdminSellerPayoutsPage() {
   // ------------------------------
   if (checking) {
     return (
-      <main className="py-4 md:py-6">
-        <div className="glass glass-ring rounded-[28px] p-6 text-sm text-slate-700">
-          Checking admin access…
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 md:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="backdrop-blur-xl bg-white/60 rounded-3xl border border-white/50 shadow-xl shadow-slate-200/50 p-8 text-center">
+            <div className="inline-flex items-center gap-3 text-slate-600">
+              <div className="w-5 h-5 border-2 border-slate-400/30 border-t-slate-600 rounded-full animate-spin" />
+              <span className="text-sm font-medium">Checking admin access...</span>
+            </div>
+          </div>
         </div>
       </main>
     );
   }
-
   if (!isAdmin) {
     return null;
   }
 
-  const totalPendingAll = sellerStats.reduce(
-    (acc, s) => acc + s.totalPendingCents,
-    0
-  );
-  const totalPaidAll = sellerStats.reduce(
-    (acc, s) => acc + s.totalPaidCents,
-    0
-  );
+  const totalPendingAll = filteredTotals.pendingCents;
+  const totalPaidAll = filteredTotals.paidCents;
 
   // ------------------------------
   // MAIN UI
   // ------------------------------
   return (
-    <main className="py-4 md:py-6 space-y-6">
-      {/* HEADER CARD */}
-      <section className="glass glass-ring rounded-[28px] p-6 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <main className="py-4 md:py-6 space-y-4">
+      {/* Compact header */}
+      <section className="glass glass-ring rounded-[28px] p-5 md:p-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-              Admin
-            </div>
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mt-1">
-              Seller Payouts
-            </h1>
-            <p className="text-sm md:text-base text-slate-700 mt-1">
-              See each seller&apos;s products and payout totals (pending vs
-              paid).
-            </p>
+            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Admin</div>
+            <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Seller Payouts</h1>
           </div>
-
           <button
             onClick={() => router.push("/admin")}
-            className="pill px-5 py-2 text-sm font-semibold text-slate-900"
+            className="pill px-4 py-1.5 text-sm font-semibold text-slate-900 shrink-0"
           >
-            ← Back to Admin
+            Back to Admin
           </button>
         </div>
 
-        {/* High-level stats */}
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-              Sellers
-            </div>
-            <div className="mt-1 text-3xl font-bold text-slate-900">
-              {sellerStats.length}
-            </div>
-            <div className="mt-1 text-[11px] text-slate-600">
-              Sellers with products / payouts
-            </div>
-          </div>
+        {/* Compact summary strip */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="font-semibold text-slate-900">
+            {filteredSellerStats.length} sellers
+          </span>
+          {filteredTotals.sellersWithPending > 0 && (
+            <span className="text-slate-500">
+              {filteredTotals.sellersWithPending} with balance
+            </span>
+          )}
+          {totalPendingAll > 0 && (
+            <span className="text-amber-700">
+              Pending <span className="font-semibold">{formatMoney(totalPendingAll)}</span>
+            </span>
+          )}
+          {totalPaidAll > 0 && (
+            <span className="text-emerald-700">
+              Paid <span className="font-semibold">{formatMoneyCompact(totalPaidAll)}</span>
+            </span>
+          )}
+          {filteredTotals.payoutRows > 0 && (
+            <span className="text-slate-500">
+              {filteredTotals.payoutRows} transactions
+            </span>
+          )}
+        </div>
 
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-              Pending Payouts
-            </div>
-            <div className="mt-1 text-2xl md:text-3xl font-bold text-amber-900">
-              {formatMoney(totalPendingAll)}
-            </div>
-            <div className="mt-1 text-[11px] text-amber-700">
-              Total amount still to be sent
-            </div>
-          </div>
-
-          <div className="glass glass-ring rounded-[24px] p-4">
-            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-              Paid to Sellers
-            </div>
-            <div className="mt-1 text-2xl md:text-3xl font-bold text-emerald-900">
-              {formatMoney(totalPaidAll)}
-            </div>
-            <div className="mt-1 text-[11px] text-emerald-700">
-              Sum of all completed payouts
-            </div>
-          </div>
+        <div className="mt-4">
+          <input
+            id="admin-payout-search"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, phone, or product..."
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300"
+          />
         </div>
       </section>
 
-      {/* ERROR (soft warning) */}
       {errorMsg && (
-        <section className="glass glass-ring rounded-[28px] p-4 text-sm text-rose-700 bg-rose-50 border border-rose-200">
+        <div className="glass glass-ring rounded-[24px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {errorMsg}
-        </section>
+        </div>
       )}
 
-      {/* SELLER LIST */}
-      <section className="glass glass-ring rounded-[28px] p-4 md:p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div>
-            <div className="text-sm font-bold text-slate-900">
-              Sellers &amp; Earnings
-            </div>
-            <div className="text-[11px] text-slate-600">
-              Products they submitted, and payout amounts.
-            </div>
-          </div>
+      {loading ? (
+        <div className="glass glass-ring rounded-[28px] p-8 text-center text-sm text-slate-500">
+          Loading seller data...
         </div>
-
-        {loading ? (
-          <div className="text-sm text-slate-700">Loading seller payouts…</div>
-        ) : sellerStats.length === 0 ? (
-          <div className="rounded-2xl bg-white/70 border border-white/80 px-4 py-8 text-center text-sm text-slate-600">
-            No sellers found yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sellerStats.map((s) => (
-              <div
-                key={s.seller_id}
-                className="glass glass-ring rounded-[24px] p-4"
-              >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-bold text-slate-900 truncate">
-                    {s.name}
-                  </div>
-                  {s.contact && (
-                    <div className="text-xs text-slate-600 truncate">
-                      {s.contact}
-                    </div>
-                  )}
-
-                  <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-700">
-                    <span>
-                      Total products:{" "}
-                      <b className="text-slate-900">{s.totalProducts}</b>
-                    </span>
-                    <span>
-                      Submitted:{" "}
-                      <b className="text-slate-900">{s.submitted}</b>
-                    </span>
-                    <span>
-                      Approved:{" "}
-                      <b className="text-slate-900">{s.approved}</b>
-                    </span>
-                    <span>
-                      Delisted:{" "}
-                      <b className="text-slate-900">{s.delisted}</b>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="w-full md:w-[280px]">
-                  <div className="rounded-2xl bg-white/80 border border-white/90 p-3 text-[11px] space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Total recorded</span>
-                      <span className="font-bold text-slate-900">
-                        {formatMoney(s.totalOwedCents)}
+      ) : filteredSellerStats.length === 0 ? (
+        <div className="glass glass-ring rounded-[28px] p-10 text-center">
+          <div className="text-lg font-bold text-slate-900">No sellers found</div>
+          <div className="mt-1 text-sm text-slate-500">Try adjusting your search terms</div>
+        </div>
+      ) : (
+        <section className="glass glass-ring rounded-[28px] divide-y divide-slate-100 overflow-hidden">
+          {filteredSellerStats.map((s) => (
+            <div key={s.seller_id}>
+              {/* Compact collapsed row */}
+              <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold text-slate-900 text-sm">{s.name}</span>
+                    <span className="text-xs text-slate-400">{s.contact}</span>
+                    {s.totalPendingCents > 0 && (
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                        payout pending
                       </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Pending payout</span>
-                      <span className="font-bold text-amber-900">
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-500">
+                    {s.approved > 0 && (
+                      <span className="text-emerald-700 font-medium">{s.approved} live</span>
+                    )}
+                    {s.submitted > 0 && (
+                      <span className="text-sky-700 font-medium">{s.submitted} pending review</span>
+                    )}
+                    {s.delisted > 0 && (
+                      <span className="text-slate-400">{s.delisted} delisted</span>
+                    )}
+                    <span className="text-slate-300">·</span>
+                    <span>
+                      Pending{" "}
+                      <span className={s.totalPendingCents > 0 ? "font-semibold text-amber-700" : "text-slate-400"}>
                         {formatMoney(s.totalPendingCents)}
                       </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Paid to date</span>
-                      <span className="font-bold text-emerald-900">
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span>
+                      Paid{" "}
+                      <span className="font-semibold text-emerald-700">
                         {formatMoney(s.totalPaidCents)}
                       </span>
-                    </div>
-
-                    <div className="mt-3 flex justify-end">
-                      <button
-                        type="button"
-                        disabled={s.totalPendingCents <= 0}
-                        onClick={() => openRecordModal(s)}
-                        className={
-                          "px-3 py-2 rounded-xl text-[11px] font-semibold " +
-                          (s.totalPendingCents <= 0
-                            ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-                            : "bg-slate-900 text-white hover:bg-slate-800")
-                        }
-                      >
-                        Record payout
-                      </button>
-                    </div>
+                    </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Product list */}
-              {s.productList.length > 0 && (
-                <div className="mt-3 rounded-2xl bg-white/60 border border-white/80 p-3">
-                  <div className="text-[11px] font-bold text-slate-700 mb-2">Products ({s.productList.length})</div>
-                  <div className="flex flex-wrap gap-2">
-                    {s.productList.map((prod) => (
-                      <span
-                        key={prod.id}
-                        className={[
-                          "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
-                          prod.status === "approved" && prod.isActive ? "bg-emerald-50 text-emerald-700" :
-                          prod.status === "submitted" ? "bg-sky-50 text-sky-700" :
-                          prod.status === "delisted" || !prod.isActive ? "bg-rose-50 text-rose-600" :
-                          "bg-slate-100 text-slate-600"
-                        ].join(" ")}
-                      >
-                        {prod.name}
-                        <span className="text-[9px] opacity-70 uppercase">{prod.status === "approved" && prod.isActive ? "live" : !prod.isActive ? "inactive" : prod.status}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* RECORD PAYOUT MODAL */}
-      {activeSeller && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
-          <div className="glass glass-ring rounded-[24px] bg-white max-w-sm w-full mx-4 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                  Record payout
-                </div>
-                <div className="text-sm font-bold text-slate-900">
-                  {activeSeller.name}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closeRecordModal}
-                className="text-xs text-slate-500 hover:text-slate-800"
-                disabled={modalSaving}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="text-[11px] text-slate-600 mb-2">
-              Remaining pending balance:{" "}
-              <span className="font-semibold text-slate-900">
-                {formatMoney(activeSeller.totalPendingCents)}
-              </span>
-            </div>
-
-            <form onSubmit={handleRecordSubmit} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Amount to mark as paid
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={modalAmount}
-                  onChange={(e) => setModalAmount(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/60"
-                />
-                <div className="mt-1 flex justify-between text-[11px] text-slate-500">
-                  <span>Max: {formatMoney(activeSeller.totalPendingCents)}</span>
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    className="underline hover:text-slate-800"
+                    disabled={s.totalPendingCents <= 0}
+                    onClick={() => openRecordModal(s)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors ${
+                      s.totalPendingCents <= 0
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-slate-900 text-white hover:bg-slate-800"
+                    }`}
+                  >
+                    Record Payout
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
-                      setModalAmount(
-                        (activeSeller.totalPendingCents / 100).toFixed(2)
+                      setExpandedSellerId((current) =>
+                        current === s.seller_id ? null : s.seller_id
                       )
                     }
+                    aria-expanded={expandedSellerId === s.seller_id}
+                    aria-controls={`seller-payout-${s.seller_id}`}
+                    className="text-xs font-semibold text-slate-600 border border-slate-200 bg-white rounded-xl px-3 py-1.5 hover:bg-slate-50 transition-colors"
                   >
-                    Pay full amount
+                    {expandedSellerId === s.seller_id ? "Hide ↑" : "Details ↓"}
                   </button>
                 </div>
               </div>
 
-              {modalError && (
-                <div className="text-[11px] text-rose-600">{modalError}</div>
-              )}
+                  {expandedSellerId === s.seller_id && (
+                    <div
+                      id={`seller-payout-${s.seller_id}`}
+                      className="border-t border-slate-200/60 bg-slate-50/50 backdrop-blur-sm"
+                      role="region"
+                      aria-label={`${s.name} payout details`}
+                    >
+                      <div className="p-5 md:p-6 space-y-4">
+                        <div className="bg-white/60 rounded-xl border border-white/60 overflow-hidden">
+                          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200/60 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-sm font-semibold text-slate-700">Payout History</span>
+                              <span className="ml-1 px-2 py-0.5 rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
+                                {s.payoutHistory.length}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
+                            {s.payoutHistory.length === 0 ? (
+                              <div className="text-center py-6 text-sm text-slate-400">
+                                No payout records found
+                              </div>
+                            ) : (
+                              s.payoutHistory.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between p-3 rounded-lg bg-white border border-slate-100 hover:border-slate-200 transition-colors"
+                                >
+                                  <div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                      {formatPeriod(item.periodStart, item.periodEnd)}
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-0.5">
+                                      {item.paidAt
+                                        ? `Paid on ${new Date(item.paidAt).toLocaleDateString()}`
+                                        : "Pending payment"}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span
+                                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                                        item.status === "paid"
+                                          ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                          : "bg-amber-100 text-amber-700 border border-amber-200"
+                                      }`}
+                                    >
+                                      {item.status}
+                                    </span>
+                                    <span className="text-sm font-bold text-slate-900 min-w-[80px] text-right">
+                                      {formatMoney(item.amountCents)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
 
-              <div className="flex justify-end gap-2 pt-1">
+                        <div className="bg-white/60 rounded-xl border border-white/60 overflow-hidden">
+                          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200/60 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              </svg>
+                              <span className="text-sm font-semibold text-slate-700">Products</span>
+                              <span className="ml-1 px-2 py-0.5 rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
+                                {s.productList.length}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
+                            {s.productList.length === 0 ? (
+                              <div className="text-center py-6 text-sm text-slate-400">
+                                No products found
+                              </div>
+                            ) : (
+                              s.productList.map((prod) => (
+                                <div
+                                  key={prod.id}
+                                  className="flex items-center justify-between p-3 rounded-lg bg-white border border-slate-100 hover:border-slate-200 transition-colors"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-medium text-slate-900 truncate">
+                                      {prod.name}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={`ml-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide shrink-0 ${
+                                      prod.status === "approved" && prod.isActive
+                                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                        : prod.status === "submitted"
+                                        ? "bg-sky-100 text-sky-700 border border-sky-200"
+                                        : prod.status === "delisted" || !prod.isActive
+                                        ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                        : "bg-slate-100 text-slate-600 border border-slate-200"
+                                    }`}
+                                  >
+                                    {prod.status === "approved" && prod.isActive
+                                      ? "Live"
+                                      : !prod.isActive
+                                      ? "Inactive"
+                                      : prod.status}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+            </div>
+          ))}
+        </section>
+      )}
+      {/* MODAL */}
+      {activeSeller && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm transition-opacity" 
+            onClick={closeRecordModal}
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="record-payout-title"
+            aria-describedby="record-payout-description"
+            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-900/20 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="relative px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Record Payout
+                  </div>
+                  <div id="record-payout-title" className="text-lg font-bold text-slate-900">
+                    {activeSeller.name}
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={closeRecordModal}
                   disabled={modalSaving}
-                  className="px-3 py-2 rounded-xl text-[11px] font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                  aria-label="Close payout dialog"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={modalSaving}
-                  className="px-4 py-2 rounded-xl text-[11px] font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"
-                >
-                  {modalSaving ? "Saving…" : "Save payout"}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            </form>
+            </div>
+
+            <div className="p-6">
+              <div id="record-payout-description" className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="text-xs text-slate-500 mb-1">Remaining pending balance</div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {formatMoney(activeSeller.totalPendingCents)}
+                </div>
+              </div>
+
+              <form onSubmit={handleRecordSubmit} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="record-payout-amount"
+                    className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2"
+                  >
+                    Amount to Record
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <span className="text-slate-400 font-semibold">ETB</span>
+                    </div>
+                    <input
+                      id="record-payout-amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={modalAmount}
+                      onChange={(e) => setModalAmount(e.target.value)}
+                      className="w-full pl-14 pr-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 font-semibold text-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-xs text-slate-400">
+                      Max: {formatMoney(activeSeller.totalPendingCents)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 underline decoration-emerald-300 hover:decoration-emerald-500 underline-offset-2 transition-all"
+                      onClick={() =>
+                        setModalAmount(
+                          (activeSeller.totalPendingCents / 100).toFixed(2)
+                        )
+                      }
+                    >
+                      Pay full amount
+                    </button>
+                  </div>
+                </div>
+
+                {modalError && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 border border-rose-100">
+                    <svg className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-xs text-rose-700">{modalError}</span>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeRecordModal}
+                    disabled={modalSaving}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={modalSaving}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-900/20 hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {modalSaving ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save Payout
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
     </main>
   );
 }
+
