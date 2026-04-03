@@ -98,6 +98,17 @@ type PayoutBankForm = {
   notes: string;
 };
 
+type SellerProfileForm = {
+  displayName: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  addressLine1: string;
+  city: string;
+  subcity: string;
+  notes: string;
+};
+
 export default function SellerDashboardPage() {
   const router = useRouter();
 
@@ -132,11 +143,25 @@ export default function SellerDashboardPage() {
   const [newSaleCount, setNewSaleCount] = useState(0);
   const [bankSaving, setBankSaving] = useState(false);
   const [bankSaveMsg, setBankSaveMsg] = useState<string | null>(null);
+  const [showBankBannerForm, setShowBankBannerForm] = useState(false);
+  const [showEditInfo, setShowEditInfo] = useState(false);
+  const [infoSaving, setInfoSaving] = useState(false);
+  const [infoSaveMsg, setInfoSaveMsg] = useState<string | null>(null);
   const [bankForm, setBankForm] = useState<PayoutBankForm>({
     bankName: "",
     accountHolder: "",
     accountNumber: "",
     branch: "",
+    notes: "",
+  });
+  const [profileForm, setProfileForm] = useState<SellerProfileForm>({
+    displayName: "",
+    fullName: "",
+    phone: "",
+    email: "",
+    addressLine1: "",
+    city: "",
+    subcity: "",
     notes: "",
   });
 
@@ -155,6 +180,14 @@ export default function SellerDashboardPage() {
       }
 
       setSignedInAs(user.id);
+      setProfileForm((prev) => ({
+        ...prev,
+        email: user.email ?? "",
+        addressLine1: String(user.user_metadata?.seller_address_line1 ?? ""),
+        city: String(user.user_metadata?.seller_city ?? ""),
+        subcity: String(user.user_metadata?.seller_subcity ?? ""),
+        notes: String(user.user_metadata?.seller_contact_notes ?? ""),
+      }));
       setBankForm({
         bankName: String(user.user_metadata?.payout_bank_name ?? ""),
         accountHolder: String(user.user_metadata?.payout_account_holder ?? ""),
@@ -166,7 +199,7 @@ export default function SellerDashboardPage() {
       // Check role
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role, display_name")
+        .select("role, display_name, full_name, phone")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -175,6 +208,13 @@ export default function SellerDashboardPage() {
         setLoading(false);
         return;
       }
+
+      setProfileForm((prev) => ({
+        ...prev,
+        displayName: profile.display_name ?? "",
+        fullName: profile.full_name ?? "",
+        phone: profile.phone ?? "",
+      }));
 
       // Load products
       const { data: rows, error } = await supabase
@@ -446,6 +486,7 @@ export default function SellerDashboardPage() {
 
       if (error) throw error;
       setBankSaveMsg("Bank details saved.");
+      setShowBankBannerForm(false);
     } catch (err: any) {
       console.error(err);
       setBankSaveMsg(err?.message || "Failed to save bank details.");
@@ -453,6 +494,52 @@ export default function SellerDashboardPage() {
       setBankSaving(false);
     }
   };
+
+  const saveSellerInfo = async () => {
+    setInfoSaving(true);
+    setInfoSaveMsg(null);
+
+    try {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          display_name: profileForm.displayName.trim() || null,
+          full_name: profileForm.fullName.trim() || null,
+          phone: profileForm.phone.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", signedInAs);
+
+      if (profileError) throw profileError;
+
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          seller_address_line1: profileForm.addressLine1.trim() || null,
+          seller_city: profileForm.city.trim() || null,
+          seller_subcity: profileForm.subcity.trim() || null,
+          seller_contact_notes: profileForm.notes.trim() || null,
+          payout_bank_name: bankForm.bankName.trim() || null,
+          payout_account_holder: bankForm.accountHolder.trim() || null,
+          payout_account_number: bankForm.accountNumber.trim() || null,
+          payout_bank_branch: bankForm.branch.trim() || null,
+          payout_bank_notes: bankForm.notes.trim() || null,
+        },
+      });
+
+      if (authError) throw authError;
+      setInfoSaveMsg("Seller information updated.");
+    } catch (err: any) {
+      console.error(err);
+      setInfoSaveMsg(err?.message || "Failed to update seller information.");
+    } finally {
+      setInfoSaving(false);
+    }
+  };
+
+  const hasBankInfo =
+    bankForm.bankName.trim().length > 0 &&
+    bankForm.accountHolder.trim().length > 0 &&
+    bankForm.accountNumber.trim().length > 0;
 
   const renderVerificationCard = () => {
     const v = verification;
@@ -744,99 +831,286 @@ export default function SellerDashboardPage() {
           </div>
         </section>
 
-        {/* Payout Bank Information */}
-        <section className="glass-card rounded-2xl p-5 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        {/* Add Bank Banner when missing required bank info */}
+        {!hasBankInfo && (
+          <section className="glass-card rounded-2xl p-4 md:p-5 border border-amber-200/70 bg-gradient-to-r from-amber-50/70 to-white/80">
+            <button
+              onClick={() => setShowBankBannerForm((prev) => !prev)}
+              className="w-full flex items-center justify-between gap-4 text-left"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Wallet className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Add your bank information</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Required before we can send Ethiopian bank payouts.
+                  </p>
+                </div>
+              </div>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-500 transition-transform ${
+                  showBankBannerForm ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {showBankBannerForm && (
+              <div className="mt-4 pt-4 border-t border-amber-200/70 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank Name</span>
+                  <input
+                    type="text"
+                    value={bankForm.bankName}
+                    onChange={(e) =>
+                      setBankForm((prev) => ({ ...prev, bankName: e.target.value }))
+                    }
+                    placeholder="Example: Commercial Bank of Ethiopia"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Holder Name</span>
+                  <input
+                    type="text"
+                    value={bankForm.accountHolder}
+                    onChange={(e) =>
+                      setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))
+                    }
+                    placeholder="Name on bank account"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Number</span>
+                  <input
+                    type="text"
+                    value={bankForm.accountNumber}
+                    onChange={(e) =>
+                      setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))
+                    }
+                    placeholder="Enter bank account number"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Branch (Optional)</span>
+                  <input
+                    type="text"
+                    value={bankForm.branch}
+                    onChange={(e) =>
+                      setBankForm((prev) => ({ ...prev, branch: e.target.value }))
+                    }
+                    placeholder="Example: Bole Branch"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                </label>
+                <div className="md:col-span-2 flex items-center gap-3">
+                  <button
+                    onClick={saveBankInfo}
+                    disabled={bankSaving}
+                    className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {bankSaving ? "Saving..." : "Save Bank Information"}
+                  </button>
+                  {bankSaveMsg && <p className="text-sm text-slate-600">{bankSaveMsg}</p>}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Edit Seller Information (includes bank details once added) */}
+        <section className="glass-card rounded-2xl p-4 md:p-5">
+          <button
+            onClick={() => setShowEditInfo((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-4 text-left"
+          >
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Payout Bank Information</h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Add your Ethiopian bank details so admin can process your payouts correctly.
+              <h3 className="text-base md:text-lg font-bold text-slate-900">Edit your information</h3>
+              <p className="text-xs md:text-sm text-slate-600 mt-0.5">
+                Contact, address, and payout profile for smooth settlements.
               </p>
             </div>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Seller Payout Details
-            </span>
-          </div>
+            <ChevronDown
+              className={`w-5 h-5 text-slate-500 transition-transform ${
+                showEditInfo ? "rotate-180" : ""
+              }`}
+            />
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank Name</span>
-              <input
-                type="text"
-                value={bankForm.bankName}
-                onChange={(e) =>
-                  setBankForm((prev) => ({ ...prev, bankName: e.target.value }))
-                }
-                placeholder="Example: Commercial Bank of Ethiopia"
-                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-              />
-            </label>
+          {showEditInfo && (
+            <div className="mt-4 pt-4 border-t border-slate-200/70 space-y-5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Contact Information</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Store Display Name</span>
+                    <input
+                      type="text"
+                      value={profileForm.displayName}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, displayName: e.target.value }))
+                      }
+                      placeholder="What customers see"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Full Name</span>
+                    <input
+                      type="text"
+                      value={profileForm.fullName}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, fullName: e.target.value }))
+                      }
+                      placeholder="Legal name"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Phone</span>
+                    <input
+                      type="text"
+                      value={profileForm.phone}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, phone: e.target.value }))
+                      }
+                      placeholder="+251..."
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Email</span>
+                    <input
+                      type="email"
+                      value={profileForm.email}
+                      disabled
+                      className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2.5 text-sm text-slate-500"
+                    />
+                  </label>
+                </div>
+              </div>
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Holder Name</span>
-              <input
-                type="text"
-                value={bankForm.accountHolder}
-                onChange={(e) =>
-                  setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))
-                }
-                placeholder="Name on bank account"
-                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-              />
-            </label>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Address Information</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Address Line</span>
+                    <input
+                      type="text"
+                      value={profileForm.addressLine1}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, addressLine1: e.target.value }))
+                      }
+                      placeholder="Street, building, landmark"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">City</span>
+                    <input
+                      type="text"
+                      value={profileForm.city}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, city: e.target.value }))
+                      }
+                      placeholder="Addis Ababa"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Subcity / Area</span>
+                    <input
+                      type="text"
+                      value={profileForm.subcity}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, subcity: e.target.value }))
+                      }
+                      placeholder="Bole, Yeka, etc."
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Contact Notes (Optional)</span>
+                    <textarea
+                      value={profileForm.notes}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, notes: e.target.value }))
+                      }
+                      rows={2}
+                      placeholder="Preferred call time, location hints, etc."
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </label>
+                </div>
+              </div>
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Number</span>
-              <input
-                type="text"
-                value={bankForm.accountNumber}
-                onChange={(e) =>
-                  setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))
-                }
-                placeholder="Enter bank account number"
-                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-              />
-            </label>
+              {hasBankInfo && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Payout Bank Information</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank Name</span>
+                      <input
+                        type="text"
+                        value={bankForm.bankName}
+                        onChange={(e) =>
+                          setBankForm((prev) => ({ ...prev, bankName: e.target.value }))
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Holder</span>
+                      <input
+                        type="text"
+                        value={bankForm.accountHolder}
+                        onChange={(e) =>
+                          setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Number</span>
+                      <input
+                        type="text"
+                        value={bankForm.accountNumber}
+                        onChange={(e) =>
+                          setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Branch (Optional)</span>
+                      <input
+                        type="text"
+                        value={bankForm.branch}
+                        onChange={(e) =>
+                          setBankForm((prev) => ({ ...prev, branch: e.target.value }))
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Branch (Optional)</span>
-              <input
-                type="text"
-                value={bankForm.branch}
-                onChange={(e) =>
-                  setBankForm((prev) => ({ ...prev, branch: e.target.value }))
-                }
-                placeholder="Example: Bole Branch"
-                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-              />
-            </label>
-
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Payout Notes (Optional)</span>
-              <textarea
-                value={bankForm.notes}
-                onChange={(e) =>
-                  setBankForm((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                rows={3}
-                placeholder="Any extra details for payout processing"
-                className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <button
-              onClick={saveBankInfo}
-              disabled={bankSaving}
-              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            >
-              {bankSaving ? "Saving..." : "Save Bank Information"}
-            </button>
-            {bankSaveMsg && (
-              <p className="text-sm text-slate-600">{bankSaveMsg}</p>
-            )}
-          </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={saveSellerInfo}
+                  disabled={infoSaving}
+                  className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-lime-500 text-white font-semibold hover:bg-lime-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {infoSaving ? "Saving..." : "Save Information"}
+                </button>
+                {infoSaveMsg && <p className="text-sm text-slate-600">{infoSaveMsg}</p>}
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
