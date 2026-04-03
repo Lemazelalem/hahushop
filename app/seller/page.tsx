@@ -41,6 +41,8 @@ type ProductRow = {
   created_at: string;
   seller_price_cents: number | null;
   final_price_cents: number | null;
+  stock_quantity?: number | null;
+  size_variants?: Array<{ stock?: number | null }> | null;
   category?: string;
 };
 
@@ -88,6 +90,20 @@ type SoldItem = {
   order_created_at: string;
   order_status: string;
   order_payment_status: string;
+};
+
+type SalesByDay = {
+  dateKey: string;
+  label: string;
+  units: number;
+};
+
+type SellerStockRow = {
+  productId: string;
+  productName: string;
+  soldToday: number;
+  liveStock: number | null;
+  level: "ok" | "low" | "out" | "unknown";
 };
 
 type PayoutBankForm = {
@@ -140,6 +156,10 @@ export default function SellerDashboardPage() {
 
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
+  const [salesByDay, setSalesByDay] = useState<SalesByDay[]>([]);
+  const [soldTodayTotal, setSoldTodayTotal] = useState(0);
+  const [soldByProductToday, setSoldByProductToday] = useState<Record<string, number>>({});
+  const [liveStockDeltaByProduct, setLiveStockDeltaByProduct] = useState<Record<string, number>>({});
   const [newSaleCount, setNewSaleCount] = useState(0);
   const [bankSaving, setBankSaving] = useState(false);
   const [bankSaveMsg, setBankSaveMsg] = useState<string | null>(null);
@@ -310,6 +330,36 @@ export default function SellerDashboardPage() {
             .slice(0, 20);
 
           setSoldItems(mapped);
+
+          const todayKey = new Date().toISOString().slice(0, 10);
+          const byProductToday: Record<string, number> = {};
+          const byDay: Record<string, number> = {};
+
+          for (const s of mapped) {
+            const day = s.order_created_at.slice(0, 10);
+            const qty = Math.max(0, Number(s.quantity ?? 0));
+            byDay[day] = (byDay[day] ?? 0) + qty;
+            if (day === todayKey && s.product_id) {
+              byProductToday[s.product_id] =
+                (byProductToday[s.product_id] ?? 0) + qty;
+            }
+          }
+
+          const dailyRows: SalesByDay[] = [];
+          for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().slice(0, 10);
+            dailyRows.push({
+              dateKey: key,
+              label: d.toLocaleDateString("en-US", { weekday: "short" }),
+              units: byDay[key] ?? 0,
+            });
+          }
+
+          setSalesByDay(dailyRows);
+          setSoldByProductToday(byProductToday);
+          setSoldTodayTotal(byDay[todayKey] ?? 0);
         }
 
         // Generate activities
@@ -367,13 +417,14 @@ export default function SellerDashboardPage() {
         },
         (payload) => {
           const item = payload.new as any;
+          const qty = Math.max(0, Number(item.quantity ?? 0));
           const newSale: SoldItem = {
             id: item.id,
             product_id: item.product_id,
             name_snapshot: item.name_snapshot,
             image_url_snapshot: item.image_url_snapshot,
             emoji_snapshot: item.emoji_snapshot,
-            quantity: item.quantity,
+            quantity: qty,
             line_total_cents: item.line_total_cents,
             order_id: item.order_id,
             order_created_at: new Date().toISOString(),
@@ -381,6 +432,24 @@ export default function SellerDashboardPage() {
             order_payment_status: "unpaid",
           };
           setSoldItems((prev) => [newSale, ...prev].slice(0, 20));
+          setSoldTodayTotal((prev) => prev + qty);
+          setSoldByProductToday((prev) => ({
+            ...prev,
+            [item.product_id]: (prev[item.product_id] ?? 0) + qty,
+          }));
+          setLiveStockDeltaByProduct((prev) => ({
+            ...prev,
+            [item.product_id]: (prev[item.product_id] ?? 0) + qty,
+          }));
+          setSalesByDay((prev) => {
+            if (prev.length === 0) return prev;
+            const copy = [...prev];
+            copy[copy.length - 1] = {
+              ...copy[copy.length - 1],
+              units: copy[copy.length - 1].units + qty,
+            };
+            return copy;
+          });
           setNewSaleCount((prev) => prev + 1);
         }
       )
@@ -407,6 +476,50 @@ export default function SellerDashboardPage() {
       return matchesSearch && matchesStatus;
     });
   }, [products, searchQuery, statusFilter]);
+
+  const getProductStock = (product: ProductRow): number | null => {
+    if (Array.isArray(product.size_variants) && product.size_variants.length > 0) {
+      return product.size_variants.reduce(
+        (sum, variant) => sum + Math.max(0, Number(variant?.stock ?? 0)),
+        0
+      );
+    }
+    if (typeof product.stock_quantity === "number") {
+      return Math.max(0, Number(product.stock_quantity));
+    }
+    return null;
+  };
+
+  const stockRows = useMemo<SellerStockRow[]>(() => {
+    return products
+      .map((p) => {
+        const baseStock = getProductStock(p);
+        const decremented = liveStockDeltaByProduct[p.id] ?? 0;
+        const liveStock = baseStock === null ? null : Math.max(0, baseStock - decremented);
+        const soldToday = soldByProductToday[p.id] ?? 0;
+        const level: "ok" | "low" | "out" | "unknown" =
+          liveStock === null
+            ? "unknown"
+            : liveStock <= 0
+            ? "out"
+            : liveStock <= 5
+            ? "low"
+            : "ok";
+
+        return {
+          productId: p.id,
+          productName: p.name,
+          soldToday,
+          liveStock,
+          level,
+        };
+      })
+      .sort((a, b) => {
+        const rank = { out: 0, low: 1, ok: 2, unknown: 3 };
+        return rank[a.level] - rank[b.level] || b.soldToday - a.soldToday;
+      })
+      .slice(0, 8);
+  }, [products, soldByProductToday, liveStockDeltaByProduct]);
 
   const formatMoney = (cents: number | null | undefined) => {
     if (!cents && cents !== 0) return "—";
@@ -827,6 +940,88 @@ export default function SellerDashboardPage() {
                   <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Daily Sales + Stock Watch */}
+        <section className="glass-card rounded-2xl p-5 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Daily Sales & Stock Watch</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Track how many units you sold each day and see stock dropping in real time.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+              Today sold: {soldTodayTotal} units
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Last 7 Days</div>
+              <div className="grid grid-cols-7 gap-2">
+                {salesByDay.map((d) => {
+                  const h = Math.max(8, Math.min(80, d.units * 8));
+                  return (
+                    <div key={d.dateKey} className="flex flex-col items-center gap-1">
+                      <div className="text-[10px] font-semibold text-slate-600">{d.units}</div>
+                      <div
+                        className="w-6 rounded-md bg-gradient-to-t from-lime-500 to-emerald-300"
+                        style={{ height: `${h}px` }}
+                        title={`${d.label}: ${d.units} units`}
+                      />
+                      <div className="text-[10px] text-slate-500">{d.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Stock Alerts</div>
+              {stockRows.length === 0 ? (
+                <p className="text-sm text-slate-500">No stock data yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {stockRows.map((row) => (
+                    <div
+                      key={row.productId}
+                      className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{row.productName}</p>
+                        <p className="text-xs text-slate-500">Sold today: {row.soldToday}</p>
+                      </div>
+                      <div className="text-right ml-3">
+                        <p
+                          className={`text-sm font-bold ${
+                            row.level === "out"
+                              ? "text-rose-700"
+                              : row.level === "low"
+                              ? "text-amber-700"
+                              : row.level === "unknown"
+                              ? "text-slate-500"
+                              : "text-emerald-700"
+                          }`}
+                        >
+                          {row.liveStock === null ? "—" : `${row.liveStock} left`}
+                        </p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                          {row.level === "out"
+                            ? "Out"
+                            : row.level === "low"
+                            ? "Low"
+                            : row.level === "unknown"
+                            ? "Unknown"
+                            : "Healthy"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>

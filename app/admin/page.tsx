@@ -514,6 +514,13 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            onClick={() => router.push("/admin/stock")}
+            className="pill px-5 py-3 text-sm font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors"
+          >
+            Stock Table
+          </button>
+
+          <button
             onClick={() => router.push("/admin/approved-sellers")}
             className="pill px-5 py-3 text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
           >
