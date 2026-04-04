@@ -1467,13 +1467,21 @@ export default function AdminOrdersPage() {
                         {/* Left */}
                         <div className="flex-1 min-w-0 space-y-3">
                           <div className="flex items-start gap-3">
-                            <div className="w-11 h-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-2xl flex-shrink-0">
-                              {firstItem?.emoji || "🛍️"}
-                            </div>
+                            {firstItem?.image_url_snapshot ? (
+                              <img
+                                src={firstItem.image_url_snapshot}
+                                alt={firstItem.name_snapshot || firstItem.name || "Product"}
+                                className="w-11 h-11 rounded-2xl border border-slate-100 object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-2xl flex-shrink-0">
+                                {firstItem?.emoji_snapshot || firstItem?.emoji || "🛍️"}
+                              </div>
+                            )}
 
                             <div>
                               <div className="text-sm font-semibold text-slate-900">
-                                {firstItem?.name || "Order items"}
+                                {firstItem?.name_snapshot || firstItem?.name || "Order items"}
                               </div>
                               <div className="text-xs text-slate-500">
                                 {itemsCount} item{itemsCount !== 1 ? "s" : ""}
@@ -1675,10 +1683,18 @@ export default function AdminOrdersPage() {
                                     className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-slate-100 last:border-0 bg-white"
                                   >
                                     <div className="col-span-6 flex items-center gap-2">
-                                      <span className="text-lg">{item.emoji || "📦"}</span>
+                                      {item.image_url_snapshot ? (
+                                        <img
+                                          src={item.image_url_snapshot}
+                                          alt={item.name_snapshot || item.name || "Product"}
+                                          className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                                        />
+                                      ) : (
+                                        <span className="text-lg">{item.emoji_snapshot || item.emoji || "📦"}</span>
+                                      )}
                                       <div>
                                         <div className="text-xs font-semibold text-slate-900">
-                                          {item.name}
+                                          {item.name_snapshot || item.name}
                                         </div>
                                         {item.product_id && (
                                           <div className="text-[10px] text-slate-400 font-mono">
