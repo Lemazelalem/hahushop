@@ -572,7 +572,7 @@ function LandingPage({
   landingFacts: BusinessLandingFacts | null;
   landingFactsLoading: boolean;
 }) {
-  const [activeFact, setActiveFact] = useState<BusinessLandingFactKey>("activeOrganizations");
+  const [activeFact, setActiveFact] = useState<BusinessLandingFactKey | null>(null);
   const facts = landingFacts ?? EMPTY_LANDING_FACTS;
 
   const factCards = [
@@ -618,7 +618,7 @@ function LandingPage({
     },
   ];
 
-  const selectedFact = factCards.find((card) => card.key === activeFact) ?? factCards[0];
+  const selectedFact = activeFact ? (factCards.find((card) => card.key === activeFact) ?? null) : null;
 
   return (
     <div className="bg-white">
@@ -720,7 +720,7 @@ function LandingPage({
 
           <div className="hero-stats-wrap hero-fade-up hero-delay-4">
             <div className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
-              Click a fact to inspect the organizations behind it
+              Click a metric to view the organizations behind it
             </div>
             <div className="hero-stats-grid">
               {factCards.map((card) => {
@@ -730,7 +730,7 @@ function LandingPage({
                   <button
                     type="button"
                     key={card.key}
-                    onClick={() => setActiveFact(card.key)}
+                    onClick={() => setActiveFact(isActive ? null : card.key)}
                     aria-pressed={isActive}
                     className={`hero-stat-card hero-sans ${isActive ? "is-active" : ""}`}
                   >
@@ -750,13 +750,14 @@ function LandingPage({
           </div>
         </div>
 
+        {selectedFact && (
         <div className="relative mx-auto max-w-6xl px-5 pb-8 sm:px-6 lg:px-8">
           <div className="rounded-[28px] border border-white/10 bg-slate-950/20 p-4 shadow-[0_20px_50px_rgba(2,6,23,0.26)] backdrop-blur-xl md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-2xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/80">
                   <span className="h-2 w-2 rounded-full" style={{ background: selectedFact.accent }} />
-                  Live Organization Roster
+                  Active Organizations
                 </div>
                 <h3 className="mt-3 text-lg font-semibold text-white md:text-xl">{selectedFact.panelTitle}</h3>
                 <p className="mt-1 text-sm leading-6 text-slate-300/70">{selectedFact.panelBody}</p>
@@ -824,6 +825,7 @@ function LandingPage({
             )}
           </div>
         </div>
+        )}
 
         <div
           style={{
@@ -963,8 +965,8 @@ function LandingPage({
           </button>
           <p className="text-sm text-slate-500 mt-8">
             Questions? Email{" "}
-            <a href="mailto:business@shopease.et" className="text-slate-300 hover:text-white underline underline-offset-4">
-              business@shopease.et
+            <a href="mailto:business@hahushop.et" className="text-slate-300 hover:text-white underline underline-offset-4">
+              business@hahushop.et
             </a>
           </p>
         </div>
@@ -1480,8 +1482,8 @@ function PendingView({ application }: { application: BusinessApplication }) {
         <div className="text-center space-y-4">
           <p className="text-sm text-slate-500">
             Questions? Email{" "}
-            <a href="mailto:business@shopease.et" className="text-indigo-600 hover:underline font-medium">
-              business@shopease.et
+            <a href="mailto:business@hahushop.et" className="text-indigo-600 hover:underline font-medium">
+              business@hahushop.et
             </a>
           </p>
           <button
@@ -1551,8 +1553,8 @@ function RejectedView({
 
         <div className="text-center text-sm text-slate-500">
           Need help? Email{" "}
-          <a href="mailto:business@shopease.et" className="text-indigo-600 hover:underline font-medium">
-            business@shopease.et
+          <a href="mailto:business@hahushop.et" className="text-indigo-600 hover:underline font-medium">
+            business@hahushop.et
           </a>
         </div>
       </div>

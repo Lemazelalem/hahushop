@@ -783,7 +783,7 @@ export default function SellerDashboardPage() {
               <Store className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900">Seller Dashboard</h1>
+              <h1 className="font-bold text-slate-900">Seller Dashboard. .የሻጭ ዳሽቦርድ</h1>
               <p className="text-xs text-slate-500">Manage your store</p>
             </div>
           </div>
@@ -904,7 +904,7 @@ export default function SellerDashboardPage() {
             <div className="glass-morphism rounded-2xl p-5 border-l-4 border-amber-400">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending Payout</p>
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending Payout  ቀሪ ክፍያ</p>
                   <p className="text-2xl font-bold text-amber-900 mt-1">{formatMoney(payoutTotals.totalPendingCents)}</p>
                   <p className="text-xs text-amber-600 mt-1">Awaiting payment</p>
                 </div>
