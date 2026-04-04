@@ -1,0 +1,74 @@
+  ▲ Next.js 14.2.5
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/47) ...
+   Generating static pages (11/47) 
+   Generating static pages (23/47) 
+   Generating static pages (35/47) 
+ ✓ Generating static pages (47/47)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    16.4 kB         170 kB
+├ ○ /_not-found                          142 B          87.3 kB
+├ ○ /account                             2.73 kB         145 kB
+├ ○ /account/orders                      3.82 kB         146 kB
+├ ○ /admin                               4.72 kB         147 kB
+├ ○ /admin/approvals                     5.29 kB         148 kB
+├ ○ /admin/approved-sellers              5.11 kB         148 kB
+├ ○ /admin/business                      8.99 kB         152 kB
+├ ○ /admin/delisted                      2.18 kB         145 kB
+├ ○ /admin/hero                          18.9 kB         162 kB
+├ ○ /admin/orders                        13 kB           156 kB
+├ ○ /admin/payment-settings              2.48 kB         145 kB
+├ ○ /admin/payouts                       4.38 kB         147 kB
+├ ○ /admin/products                      2.8 kB          145 kB
+├ ○ /admin/promotions                    6.54 kB         149 kB
+├ ○ /admin/public-employee               6.87 kB         150 kB
+├ ○ /admin/returns                       8.63 kB         151 kB
+├ ○ /admin/sellers                       3.98 kB         147 kB
+├ ƒ /api/admin/profiles                  0 B                0 B
+├ ƒ /api/admin/sellers                   0 B                0 B
+├ ƒ /api/visual-search                   0 B                0 B
+├ ƒ /auth/callback                       0 B                0 B
+├ ○ /auth/login                          4.42 kB         147 kB
+├ ○ /auth/reset-password                 2.17 kB         145 kB
+├ ○ /auth/signup                         6.71 kB         149 kB
+├ ○ /business                            16.1 kB         166 kB
+├ ○ /business/analytics                  6.26 kB         156 kB
+├ ○ /categories                          3.23 kB         146 kB
+├ ○ /checkout                            15.6 kB         158 kB
+├ ○ /contact                             1.43 kB        88.6 kB
+├ ○ /deals                               6 kB            149 kB
+├ ○ /invoices                            8.16 kB         158 kB
+├ ○ /my-orders                           10.2 kB         153 kB
+├ ○ /new                                 6.96 kB         150 kB
+├ ƒ /products/[id]                       13.6 kB         156 kB
+├ ○ /public-employee                     14.7 kB         157 kB
+├ ○ /public-employee/signup              6.44 kB         156 kB
+├ ○ /seller                              9.1 kB          152 kB
+├ ○ /seller/payouts                      2.83 kB         145 kB
+├ ƒ /seller/products/[id]                12.5 kB         158 kB
+├ ○ /seller/products/new                 14.3 kB         159 kB
+├ ○ /seller/verification                 5.01 kB         148 kB
+├ ○ /shop                                9.38 kB         156 kB
+├ ƒ /shop/[id]                           7.78 kB         150 kB
+├ ○ /sitemap.xml                         0 B                0 B
+├ ○ /specials                            2.55 kB        89.7 kB
+└ ○ /track                               5.72 kB         155 kB
++ First Load JS shared by all            87.1 kB
+  ├ chunks/7023-78f6c910f8077320.js      31.5 kB
+  ├ chunks/fd9d1056-3ee2c95ad75c4732.js  53.6 kB
+  └ other shared chunks (total)          1.97 kB
+
+
+ƒ Middleware                             76.1 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

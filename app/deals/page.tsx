@@ -246,14 +246,6 @@ export default function DealsPage() {
                       {p.discount_pct}% OFF
                     </div>
 
-                    {isOOS && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
-                          Out of Stock
-                        </span>
-                      </div>
-                    )}
-
                     <button
                       onClick={(e) => toggleWishlist(p.id, e)}
                       className={`absolute top-3 right-3 p-2.5 rounded-full transition-all ${
@@ -294,6 +286,12 @@ export default function DealsPage() {
                     </h3>
                     <StarRating rating={p.rating_avg} count={p.rating_count} />
 
+                    {isOOS && (
+                      <div className="text-[11px] font-bold text-rose-600 bg-rose-50 rounded-md px-2 py-1 mt-2">
+                        Out of stock
+                      </div>
+                    )}
+
                     <div className="mt-2 mb-3 px-2.5 py-1.5 bg-rose-50 border border-rose-100 rounded-xl">
                       <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">
                         You save {money(p.savings_cents)}
@@ -319,7 +317,7 @@ export default function DealsPage() {
                         }`}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        {isOOS ? "Sold Out" : "Add"}
+                        {isOOS ? "Out of stock" : "Add"}
                       </button>
                     </div>
                   </div>

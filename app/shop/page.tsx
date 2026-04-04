@@ -483,14 +483,6 @@ const MobileFeedCard = React.memo(function MobileFeedCard({
           </div>
         )}
 
-        {isOOS && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="bg-white/95 text-rose-600 text-[11px] font-black px-3 py-1.5 rounded-full shadow">
-              Out of Stock
-            </span>
-          </div>
-        )}
-
         {qtyInCart > 0 && (
           <div className="absolute bottom-2 left-2 bg-black/80 text-white text-[10px] font-bold px-2 py-1 rounded-full">
             {qtyInCart} in cart
@@ -522,6 +514,12 @@ const MobileFeedCard = React.memo(function MobileFeedCard({
             {formatSoldCount(soldCount)}
           </span>
         </div>
+
+        {isOOS && (
+          <div className="text-[11px] font-bold text-rose-600 bg-rose-50 rounded-md px-2 py-1 mb-1.5">
+            Out of stock
+          </div>
+        )}
 
         <div className="flex items-end justify-between gap-2">
           <div className="min-w-0 flex items-baseline gap-1.5">
@@ -1267,13 +1265,6 @@ function ShopPageContent() {
                               {discount}% off
                             </div>
                           )}
-                          {isOOS && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
-                                Out of Stock
-                              </span>
-                            </div>
-                          )}
                           <button
                             onClick={(e) => toggleWishlist(p.id, e)}
                             className={`absolute top-3 right-3 p-2.5 rounded-full transition-all ${
@@ -1298,6 +1289,11 @@ function ShopPageContent() {
                                 >
                                   {p.name}
                                 </h3>
+                                {isOOS && (
+                                  <div className="text-xs font-bold text-rose-600 bg-rose-50 rounded-md px-2 py-1 mt-1.5 inline-block">
+                                    Out of stock
+                                  </div>
+                                )}
                               </div>
                               <div className="flex items-center gap-3">
                                 <DeliveryBadge />
@@ -1387,13 +1383,6 @@ function ShopPageContent() {
                             {discount}% OFF
                           </div>
                         )}
-                        {isOOS && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
-                              Out of Stock
-                            </span>
-                          </div>
-                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1417,6 +1406,11 @@ function ShopPageContent() {
                         >
                           {p.name}
                         </h3>
+                        {isOOS && (
+                          <div className="text-xs font-bold text-rose-600 bg-rose-50 rounded-lg px-2.5 py-1.5 mb-3 inline-block">
+                            Out of stock
+                          </div>
+                        )}
                         <div className="mb-4">
                           <StarRating rating={p.rating_avg} count={p.rating_count} />
                         </div>

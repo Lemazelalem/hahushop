@@ -659,45 +659,7 @@ function DesktopProductCard({
           <span className="font-medium">24h delivery</span>
         </div>
 
-        <div className="mt-2.5 grid grid-cols-2 gap-2">
-          <button
-            onClick={onNavigate}
-            className="w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            View Deal
-          </button>
 
-          <button
-            onClick={(e) => onAddToCart(e.currentTarget)}
-            disabled={isAdded}
-            className={cx(
-              "w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-              isAdded ? "bg-emerald-500 text-white" : "text-white active:scale-95"
-            )}
-            style={!isAdded ? { background: ACCENT } : undefined}
-          >
-            {isAdded ? (
-              <>
-                <Check className="w-3.5 h-3.5" /> Added
-              </>
-            ) : canShop ? (
-              variants ? (
-                <>
-                  <ArrowRight className="w-3.5 h-3.5" /> Options
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="w-3.5 h-3.5" /> Add
-                </>
-              )
-            ) : (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5" /> Verify
-              </>
-            )}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -1345,48 +1307,7 @@ function MobileProductCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-1 mt-1">
-          <button
-            onClick={onNavigate}
-            className="w-full py-2 rounded-md text-[10px] font-bold border border-slate-200 text-slate-700 bg-white"
-            style={{ fontFamily: "inherit" }}
-          >
-            View
-          </button>
 
-          <button
-            onClick={(e) => onAdd(e.currentTarget)}
-            aria-label={
-              inCart > 0
-                ? `Added, ${inCart} in cart`
-                : canShop
-                ? variants
-                  ? "Select options"
-                  : `Add ${p.name} to cart`
-                : "Verify to shop"
-            }
-            className="w-full py-2 rounded-md text-[10px] font-bold flex items-center justify-center gap-1"
-            style={{
-              background: inCart > 0 ? "#16a34a" : ACCENT,
-              color: "#fff",
-              fontFamily: "inherit",
-            }}
-          >
-            {inCart > 0 ? (
-              <>✓ Added</>
-            ) : canShop ? (
-              variants ? (
-                <>
-                  Options <ChevronRight className="w-3 h-3" />
-                </>
-              ) : (
-                <>Add</>
-              )
-            ) : (
-              <>Verify</>
-            )}
-          </button>
-        </div>
       </div>
     </div>
   );

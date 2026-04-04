@@ -380,14 +380,6 @@ export default function NewArrivalsPage() {
                       </div>
                     )}
 
-                    {isOOS && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
-                          Out of Stock
-                        </span>
-                      </div>
-                    )}
-
                     {/* Wishlist */}
                     <button
                       onClick={(e) => toggleWishlist(p.id, e)}
@@ -435,6 +427,12 @@ export default function NewArrivalsPage() {
                     </h3>
                     <StarRating rating={p.rating_avg} count={p.rating_count} />
 
+                    {isOOS && (
+                      <div className="text-[11px] font-bold text-rose-600 bg-rose-50 rounded-md px-2 py-1 mt-2">
+                        Out of stock
+                      </div>
+                    )}
+
                     {/* Price row */}
                     <div className="flex items-center justify-between mt-3">
                       <div>
@@ -454,7 +452,7 @@ export default function NewArrivalsPage() {
                         style={isOOS ? undefined : { background: "linear-gradient(90deg,#a3e635,#22d3ee)", color: "#0f172a" }}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        {isOOS ? "Sold Out" : "Add"}
+                        {isOOS ? "Out of stock" : "Add"}
                       </button>
                     </div>
                   </div>
