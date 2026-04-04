@@ -783,7 +783,7 @@ export default function SellerDashboardPage() {
               <Store className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900">Seller Dashboard. .የሻጭ ዳሽቦርድ</h1>
+              <h1 className="font-bold text-slate-900">Seller Dashboard · የሻጭ ዳሽቦርድ</h1>
               <p className="text-xs text-slate-500">Manage your store</p>
             </div>
           </div>
