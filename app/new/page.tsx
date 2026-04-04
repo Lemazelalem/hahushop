@@ -14,6 +14,8 @@ import {
   CalendarDays,
 } from "lucide-react";
 
+type SizeVariant = { id: string; label: string; stock: number; priceAdjustCents: number };
+
 type ProductRow = {
   id: string;
   name: string;
@@ -27,7 +29,16 @@ type ProductRow = {
   category_name: string | null;
   created_at: string;
   days_ago: number;
+  stock_quantity: number | null;
+  size_variants: SizeVariant[] | null;
 };
+
+function getProductStock(stockQty: number | null, sizeVariants: SizeVariant[] | null): number | null {
+  if (sizeVariants && sizeVariants.length > 0) {
+    return sizeVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+  }
+  return stockQty;
+}
 
 function money(cents: number | null | undefined): string {
   if (!cents || cents <= 0) return "-";
@@ -124,6 +135,7 @@ export default function NewArrivalsPage() {
             id, name, description, emoji, image_url,
             final_price_cents, price_cents,
             rating_avg, rating_count, created_at,
+            stock_quantity, size_variants,
             categories(name)
           `)
           .eq("status", "approved")
@@ -152,6 +164,8 @@ export default function NewArrivalsPage() {
             category_name: r.categories?.name ?? null,
             created_at: r.created_at,
             days_ago: daysAgo,
+            stock_quantity: (r.stock_quantity as number | null) ?? null,
+            size_variants: (r.size_variants as SizeVariant[] | null) ?? null,
           };
         });
 
@@ -323,6 +337,8 @@ export default function NewArrivalsPage() {
               const discountPct = hasDiscount
                 ? Math.round((1 - p.final_price_cents! / originalPrice!) * 100)
                 : 0;
+              const stock = getProductStock(p.stock_quantity, p.size_variants);
+              const isOOS = stock !== null && stock <= 0;
 
               return (
                 <article
@@ -361,6 +377,14 @@ export default function NewArrivalsPage() {
                     {discountPct > 0 && (
                       <div className="absolute top-3 right-10 bg-rose-500 text-white text-[10px] font-bold px-2 py-1.5 rounded-full">
                         {discountPct}% OFF
+                      </div>
+                    )}
+
+                    {isOOS && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
+                          Out of Stock
+                        </span>
                       </div>
                     )}
 
@@ -422,12 +446,15 @@ export default function NewArrivalsPage() {
                         )}
                       </div>
                       <button
-                        onClick={() => addItem("approved", p.id, 1)}
-                        className="text-white text-xs font-bold px-3 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                        style={{ background: "linear-gradient(90deg,#a3e635,#22d3ee)", color: "#0f172a" }}
+                        onClick={() => !isOOS && addItem("approved", p.id, 1)}
+                        disabled={isOOS}
+                        className={`text-xs font-bold px-3 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 ${
+                          isOOS ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "active:scale-95"
+                        }`}
+                        style={isOOS ? undefined : { background: "linear-gradient(90deg,#a3e635,#22d3ee)", color: "#0f172a" }}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        Add
+                        {isOOS ? "Sold Out" : "Add"}
                       </button>
                     </div>
                   </div>

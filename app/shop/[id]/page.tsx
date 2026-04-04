@@ -9,6 +9,8 @@ import { ShoppingCart, Check, Minus, Plus } from "lucide-react";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
 
+type SizeVariant = { id: string; label: string; stock: number; priceAdjustCents: number };
+
 type ProductRow = {
   id: string;
   name: string;
@@ -24,7 +26,16 @@ type ProductRow = {
   category: {
     name: string | null;
   } | null;
+  stock_quantity: number | null;
+  size_variants: SizeVariant[] | null;
 };
+
+function getProductStock(stockQty: number | null, sizeVariants: SizeVariant[] | null): number | null {
+  if (sizeVariants && sizeVariants.length > 0) {
+    return sizeVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+  }
+  return stockQty;
+}
 
 type RatingStats = {
   avg: number;
@@ -176,6 +187,8 @@ export default function ProductDetailPage() {
             public_employee_price_cents,
             image_url,
             extra_image_urls,
+            stock_quantity,
+            size_variants,
             category:categories(name)
           `
           )
@@ -315,15 +328,18 @@ export default function ProductDetailPage() {
     window.setTimeout(() => setAddedToCart(false), 2000);
   }
 
+  const stock = product ? getProductStock(product.stock_quantity, product.size_variants) : null;
+  const isOOS = stock !== null && stock <= 0;
+
   function handleAddToCart(e?: MouseEvent<HTMLButtonElement>) {
-    if (!product) return;
+    if (!product || isOOS) return;
     addItem("approved", product.id, selectedQty);
     flyToCart({ sourceEl: e?.currentTarget, imageUrl: product.image_url });
     showAddedState();
   }
 
   function handleShopNow(e?: MouseEvent<HTMLButtonElement>) {
-    if (!product) return;
+    if (!product || isOOS) return;
     addItem("approved", product.id, selectedQty);
     flyToCart({ sourceEl: e?.currentTarget, imageUrl: product.image_url });
     showAddedState();
@@ -558,19 +574,36 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
+                {/* Stock indicator */}
+                {stock !== null && (
+                  <div className="mt-1">
+                    {isOOS ? (
+                      <span className="text-sm font-bold text-rose-600">Out of Stock</span>
+                    ) : stock <= 5 ? (
+                      <span className="text-sm font-semibold text-amber-600">Only {stock} left in stock</span>
+                    ) : (
+                      <span className="text-sm text-slate-500">{stock} in stock</span>
+                    )}
+                  </div>
+                )}
+
                 {/* Purchase actions belong on product details page */}
                 <div className="hidden md:flex gap-3 flex-wrap">
                   <button
                     onClick={(e) => handleAddToCart(e)}
-                    disabled={addedToCart}
+                    disabled={addedToCart || isOOS}
                     className={[
                       "flex-1 min-w-[160px] flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-bold text-sm transition-all",
-                      addedToCart
+                      isOOS
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : addedToCart
                         ? "bg-emerald-500 text-white"
                         : "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/25 active:scale-[0.98]",
                     ].join(" ")}
                   >
-                    {addedToCart ? (
+                    {isOOS ? (
+                      <>Out of Stock</>
+                    ) : addedToCart ? (
                       <>
                         <Check className="w-5 h-5" />
                         Added {selectedQty}
@@ -586,7 +619,10 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     onClick={(e) => handleShopNow(e)}
-                    className="flex-1 min-w-[160px] flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-bold text-sm bg-slate-900 text-white active:scale-[0.98] transition-all"
+                    disabled={isOOS}
+                    className={`flex-1 min-w-[160px] flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-bold text-sm transition-all ${
+                      isOOS ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-900 text-white active:scale-[0.98]"
+                    }`}
                   >
                     Shop Now
                   </button>
@@ -663,15 +699,18 @@ export default function ProductDetailPage() {
               <button
                 type="button"
                 onClick={(e) => handleAddToCart(e)}
-                disabled={addedToCart}
+                disabled={addedToCart || isOOS}
                 className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3.5 text-sm font-bold shadow-[0_6px_16px_rgba(15,23,42,0.08)] transition-all active:scale-[0.98]"
                 style={{
-                  background: addedToCart ? BLACK : SURFACE,
-                  color: addedToCart ? "#fff" : BLACK,
-                  border: `1.5px solid ${addedToCart ? BLACK : BORDER}`,
+                  background: isOOS ? "#e2e8f0" : addedToCart ? BLACK : SURFACE,
+                  color: isOOS ? "#94a3b8" : addedToCart ? "#fff" : BLACK,
+                  border: `1.5px solid ${isOOS ? "#e2e8f0" : addedToCart ? BLACK : BORDER}`,
+                  cursor: isOOS ? "not-allowed" : undefined,
                 }}
               >
-                {addedToCart ? (
+                {isOOS ? (
+                  <>Out of Stock</>
+                ) : addedToCart ? (
                   <>
                     <Check className="h-4 w-4" />
                     Added
@@ -687,13 +726,16 @@ export default function ProductDetailPage() {
               <button
                 type="button"
                 onClick={(e) => handleShopNow(e)}
+                disabled={isOOS}
                 className="flex-1 inline-flex items-center justify-center rounded-full px-4 py-3.5 text-sm font-bold text-white transition-all active:scale-[0.98]"
                 style={{
-                  background: ACCENT,
-                  boxShadow: "0 12px 24px rgba(255,2,85,0.24)",
+                  background: isOOS ? "#e2e8f0" : ACCENT,
+                  color: isOOS ? "#94a3b8" : "#fff",
+                  boxShadow: isOOS ? "none" : "0 12px 24px rgba(255,2,85,0.24)",
+                  cursor: isOOS ? "not-allowed" : undefined,
                 }}
               >
-                Buy Now
+                {isOOS ? "Sold Out" : "Buy Now"}
               </button>
             </div>
           </div>

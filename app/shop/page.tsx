@@ -44,6 +44,8 @@ const M_ACCENT = "#FF0255";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
 
+type SizeVariant = { id: string; label: string; stock: number; priceAdjustCents: number };
+
 type ProductRow = {
   id: string;
   status: ProductStatus;
@@ -58,7 +60,16 @@ type ProductRow = {
   category_name: string | null;
   category_id: string | null;
   created_at?: string | null;
+  stock_quantity: number | null;
+  size_variants: SizeVariant[] | null;
 };
+
+function getProductStock(stockQty: number | null, sizeVariants: SizeVariant[] | null): number | null {
+  if (sizeVariants && sizeVariants.length > 0) {
+    return sizeVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+  }
+  return stockQty;
+}
 
 type Category = {
   id: string;
@@ -449,6 +460,8 @@ const MobileFeedCard = React.memo(function MobileFeedCard({
     originalPrice && price < originalPrice
       ? Math.round((1 - price / originalPrice) * 100)
       : 0;
+  const stock = getProductStock(p.stock_quantity, p.size_variants);
+  const isOOS = stock !== null && stock <= 0;
 
   const soldCount =
     p.rating_count > 0
@@ -467,6 +480,14 @@ const MobileFeedCard = React.memo(function MobileFeedCard({
         {discount > 0 && (
           <div className="absolute top-2 left-2 bg-[#ff0050] text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm">
             -{discount}%
+          </div>
+        )}
+
+        {isOOS && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <span className="bg-white/95 text-rose-600 text-[11px] font-black px-3 py-1.5 rounded-full shadow">
+              Out of Stock
+            </span>
           </div>
         )}
 
@@ -625,6 +646,7 @@ function ShopPageContent() {
             .select(`
               id, status, name, description, emoji, image_url,
               final_price_cents, price_cents, rating_avg, rating_count, created_at,
+              stock_quantity, size_variants,
               categories(id, name)
             `)
             .eq("status", "approved")
@@ -656,6 +678,8 @@ function ShopPageContent() {
           created_at: (row.created_at as string | null) ?? null,
           category_name: row.categories?.name ?? null,
           category_id: row.categories?.id ?? null,
+          stock_quantity: (row.stock_quantity as number | null) ?? null,
+          size_variants: (row.size_variants as SizeVariant[] | null) ?? null,
         }));
 
         setProducts(rows);
@@ -1212,6 +1236,8 @@ function ShopPageContent() {
                     originalPrice && price < originalPrice
                       ? Math.round((1 - price / originalPrice) * 100)
                       : 0;
+                  const stock = getProductStock(p.stock_quantity, p.size_variants);
+                  const isOOS = stock !== null && stock <= 0;
 
                   if (filters.viewMode === "list") {
                     return (
@@ -1239,6 +1265,13 @@ function ShopPageContent() {
                           {discount > 0 && (
                             <div className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
                               {discount}% off
+                            </div>
+                          )}
+                          {isOOS && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
+                                Out of Stock
+                              </span>
                             </div>
                           )}
                           <button
@@ -1352,6 +1385,13 @@ function ShopPageContent() {
                         {discount > 0 && (
                           <div className="absolute bottom-4 left-4 bg-rose-500 text-white text-xs font-bold px-3 py-2 rounded-full">
                             {discount}% OFF
+                          </div>
+                        )}
+                        {isOOS && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
+                              Out of Stock
+                            </span>
                           </div>
                         )}
                         <button

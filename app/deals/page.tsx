@@ -12,6 +12,8 @@ import {
   Tag,
 } from "lucide-react";
 
+type SizeVariant = { id: string; label: string; stock: number; priceAdjustCents: number };
+
 type ProductRow = {
   id: string;
   name: string;
@@ -25,7 +27,16 @@ type ProductRow = {
   category_name: string | null;
   discount_pct: number;
   savings_cents: number;
+  stock_quantity: number | null;
+  size_variants: SizeVariant[] | null;
 };
+
+function getProductStock(stockQty: number | null, sizeVariants: SizeVariant[] | null): number | null {
+  if (sizeVariants && sizeVariants.length > 0) {
+    return sizeVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+  }
+  return stockQty;
+}
 
 function money(cents: number): string {
   return `ETB ${(cents / 100).toLocaleString("en-US", {
@@ -94,6 +105,7 @@ export default function DealsPage() {
             id, name, description, emoji, image_url,
             final_price_cents, price_cents,
             rating_avg, rating_count,
+            stock_quantity, size_variants,
             categories(name)
           `)
           .eq("status", "approved")
@@ -124,6 +136,8 @@ export default function DealsPage() {
               category_name: r.categories?.name ?? null,
               discount_pct: discount,
               savings_cents: orig - final,
+              stock_quantity: (r.stock_quantity as number | null) ?? null,
+              size_variants: (r.size_variants as SizeVariant[] | null) ?? null,
             };
           })
           .filter((p) => p.discount_pct > 0)
@@ -205,6 +219,8 @@ export default function DealsPage() {
             {products.map((p) => {
               const qty = cartQty[p.id] ?? 0;
               const isWishlisted = wishlist.has(p.id);
+              const stock = getProductStock(p.stock_quantity, p.size_variants);
+              const isOOS = stock !== null && stock <= 0;
               return (
                 <article
                   key={p.id}
@@ -229,6 +245,14 @@ export default function DealsPage() {
                     <div className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-black px-2.5 py-1.5 rounded-full shadow-lg">
                       {p.discount_pct}% OFF
                     </div>
+
+                    {isOOS && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white/95 text-rose-600 text-xs font-black px-3 py-1.5 rounded-full shadow">
+                          Out of Stock
+                        </span>
+                      </div>
+                    )}
 
                     <button
                       onClick={(e) => toggleWishlist(p.id, e)}
@@ -286,11 +310,16 @@ export default function DealsPage() {
                         </div>
                       </div>
                       <button
-                        onClick={() => addItem("approved", p.id, 1)}
-                        className="bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-3 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                        onClick={() => !isOOS && addItem("approved", p.id, 1)}
+                        disabled={isOOS}
+                        className={`text-xs font-bold px-3 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 ${
+                          isOOS
+                            ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                            : "bg-rose-500 hover:bg-rose-600 text-white active:scale-95"
+                        }`}
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        Add
+                        {isOOS ? "Sold Out" : "Add"}
                       </button>
                     </div>
                   </div>
