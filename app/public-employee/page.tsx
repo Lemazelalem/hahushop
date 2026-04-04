@@ -91,6 +91,7 @@ type ProductRow = {
   rating_avg: number;
   rating_count: number;
   created_at: string;
+  stock_quantity: number | null;
   color_variants: unknown[] | null;
   size_variants: unknown[] | null;
   categories?: CategoryShape | CategoryShape[] | null;
@@ -171,6 +172,17 @@ function getCategoryNames(value?: CategoryShape | CategoryShape[] | null): strin
 
 function hasVariants(p: ProductRow): boolean {
   return (p.color_variants?.length ?? 0) > 0 || (p.size_variants?.length ?? 0) > 0;
+}
+
+function isOutOfStock(p: ProductRow): boolean {
+  if (Array.isArray(p.size_variants) && p.size_variants.length > 0) {
+    const total = (p.size_variants as Array<{ stock?: number | null }>).reduce(
+      (sum, v) => sum + Math.max(0, Number(v?.stock ?? 0)),
+      0
+    );
+    return total <= 0;
+  }
+  return (p.stock_quantity ?? 0) <= 0;
 }
 
 function getPublicEmployeeQuantities(
@@ -566,6 +578,7 @@ function DesktopProductCard({
   const employeePrice = money(p.public_employee_price_cents);
   const reviews = p.rating_count ?? 0;
   const variants = hasVariants(p);
+  const oos = isOutOfStock(p);
 
   return (
     <div className="group relative bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:shadow-slate-900/5 hover:border-slate-300 transition-all duration-300 flex flex-col">
@@ -619,6 +632,12 @@ function DesktopProductCard({
           </div>
         ) : (
           <div className="h-5 mb-2.5" />
+        )}
+
+        {oos && (
+          <div className="text-[11px] font-bold text-rose-600 bg-rose-50 rounded-md px-2 py-1 mb-2">
+            Out of stock
+          </div>
         )}
 
         <div className="mt-auto bg-slate-50 rounded-xl p-3 space-y-2">
@@ -1288,6 +1307,12 @@ function MobileProductCard({
           </div>
         )}
 
+        {isOutOfStock(p) && (
+          <div className="text-[10px] font-bold text-rose-600 bg-rose-50 rounded px-1.5 py-0.5 mb-1" style={{ fontFamily: "inherit" }}>
+            Out of stock
+          </div>
+        )}
+
         <div className="mb-1">
           <div
             className="text-[17px] font-bold tracking-tight"
@@ -1566,7 +1591,7 @@ export default function PublicEmployeePage() {
           .select(
             `id, name, description, emoji, image_url, status,
              price_cents, final_price_cents, public_employee_price_cents,
-             rating_avg, rating_count, created_at,
+             rating_avg, rating_count, created_at, stock_quantity,
              color_variants, size_variants, categories(name)`
           )
           .eq("status", "approved")
