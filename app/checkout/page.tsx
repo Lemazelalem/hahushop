@@ -117,19 +117,10 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
   {
     id: "stripe_card",
     label: "Credit / Debit Card",
-    badge: "Visa / Mastercard (test mode)",
+    badge: "Visa · Mastercard",
     description: "Pay securely with any supported bank card.",
     Icon: CreditCard,
     status: "active",
-  },
-  {
-    id: "card",
-    label: "Credit / Debit Card (legacy)",
-    badge: "Visa / Mastercard",
-    description: "Pay securely with any supported bank card.",
-    Icon: CreditCard,
-    status: "locked",
-    disabled: true,
   },
   {
     id: "cbe_birr",
@@ -1122,107 +1113,90 @@ export default function CheckoutPage() {
 
     {/* ── Payment ── */}
     {!isBusinessOrder && (() => {
-      const selectedOpt = PAYMENT_OPTIONS.find((o) => o.id === paymentMethod)!;
-      const SelectedIcon = selectedOpt.Icon;
-      const sortedOptions = [...PAYMENT_OPTIONS].sort((a, b) => {
-        const rank = (o: PaymentOption) => o.status === "active" ? 0 : o.status === "coming_soon" ? 1 : 2;
-        return rank(a) - rank(b);
-      });
+      const activeOpts = PAYMENT_OPTIONS.filter((o) => o.status === "active");
+      const otherOpts = PAYMENT_OPTIONS.filter((o) => o.status !== "active");
+      const allVisible = paymentExpanded ? [...activeOpts, ...otherOpts] : activeOpts;
+
       return (
         <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-3 py-2 border-b border-slate-100">
+          <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center gap-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
             <span className="text-[12px] font-black text-slate-900">Payment</span>
+            <span className="ml-auto text-[9px] text-slate-400">Secure &amp; encrypted</span>
           </div>
 
-          <div className="p-2.5 pb-3">
-            {/* Card stack container */}
-            <div className="relative">
-              {/* Selected card — top pill */}
-              <button
-                type="button"
-                onClick={() => setPaymentExpanded((v) => !v)}
-                className="relative z-10 w-full rounded-2xl bg-slate-900 px-3.5 py-3 flex items-center gap-3 text-left shadow-lg shadow-slate-900/30 active:scale-[0.98] transition-transform"
-              >
-                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-                  <SelectedIcon className="w-4.5 h-4.5 text-white" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12px] font-black text-white leading-tight">{selectedOpt.label}</div>
-                  <div className="text-[9px] text-white/50 mt-0.5">{selectedOpt.description}</div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[8px] font-black bg-lime-400 text-slate-900">{selectedOpt.badge}</span>
-                <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-300 ${paymentExpanded ? "rotate-180" : ""}`} />
-              </button>
+          <div className="divide-y divide-slate-100">
+            {allVisible.map((opt) => {
+              const selected = paymentMethod === opt.id;
+              const Icon = opt.Icon;
+              const isLocked = opt.status === "locked";
+              const isComingSoon = opt.status === "coming_soon";
 
-              {/* Stacked card edges peeking below (collapsed only) */}
-              {!paymentExpanded && (
-                <>
-                  <div className="relative z-[5] mx-2 -mt-1.5 h-[10px] rounded-b-2xl bg-white border border-t-0 border-slate-400 shadow-[0_2px_4px_rgba(0,0,0,0.15)]" />
-                  <div className="relative z-[4] mx-4 -mt-1 h-[8px] rounded-b-2xl bg-white border border-t-0 border-slate-300 shadow-[0_2px_3px_rgba(0,0,0,0.1)]" />
-                  <div className="relative z-[3] mx-6 -mt-0.5 h-[6px] rounded-b-xl bg-white border border-t-0 border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.08)]" />
-                </>
-              )}
-            </div>
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => { if (!isLocked) setPaymentMethod(opt.id); }}
+                  disabled={isLocked}
+                  className={`w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors ${
+                    isLocked ? "opacity-40 cursor-not-allowed" : "active:bg-slate-50"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    selected ? "bg-slate-900" : isComingSoon ? "bg-amber-50" : "bg-slate-100"
+                  }`}>
+                    <Icon className={`w-4 h-4 ${selected ? "text-white" : isComingSoon ? "text-amber-600" : "text-slate-500"}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[12px] font-bold text-slate-900">{opt.label}</span>
+                      {isComingSoon && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700">Soon</span>
+                      )}
+                      {isLocked && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-slate-100 text-slate-400">Locked</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{opt.badge}</div>
+                  </div>
+                  {/* Radio circle */}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                    selected ? "border-emerald-500 bg-emerald-500" : "border-slate-300"
+                  }`}>
+                    {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-            {/* Expanded options */}
-            <div
-              className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                paymentExpanded ? "max-h-[600px] opacity-100 mt-2" : "max-h-0 opacity-0"
-              }`}
+          {/* View more / less toggle */}
+          {otherOpts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setPaymentExpanded((v) => !v)}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 border-t border-slate-100 text-[11px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
             >
-              <div className="space-y-2">
-                {sortedOptions.map((opt) => {
-                  if (opt.id === paymentMethod) return null;
-                  const Icon = opt.Icon;
-                  const isLocked = opt.status === "locked";
-                  const isComingSoon = opt.status === "coming_soon";
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        if (!isLocked) {
-                          setPaymentMethod(opt.id);
-                          setPaymentExpanded(false);
-                        }
-                      }}
-                      disabled={isLocked}
-                      className={[
-                        "w-full rounded-2xl border px-3.5 py-2.5 text-left transition-all flex items-center gap-3",
-                        isLocked ? "border-slate-100 bg-slate-50/70 opacity-40 cursor-not-allowed" : "",
-                        isComingSoon ? "border-amber-200 bg-amber-50/60 hover:border-amber-300" : "",
-                        !isLocked && !isComingSoon ? "border-slate-200 bg-white hover:border-slate-400 hover:shadow-md active:scale-[0.98]" : "",
-                      ].join(" ")}
-                    >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${isComingSoon ? "bg-amber-100" : "bg-slate-100"}`}>
-                        <Icon className={`w-3.5 h-3.5 ${isComingSoon ? "text-amber-700" : "text-slate-600"}`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-black text-slate-900 leading-tight">{opt.label}</div>
-                        <div className="text-[9px] text-slate-400 mt-0.5">{opt.description}</div>
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-0.5">
-                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${isComingSoon ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
-                          {opt.badge}
-                        </span>
-                        {isComingSoon && <span className="text-[8px] font-bold text-amber-500">Soon</span>}
-                        {isLocked && <span className="text-[8px] font-bold text-slate-300">Locked</span>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              {paymentExpanded ? "Show less" : `View ${otherOpts.length} more payment methods`}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${paymentExpanded ? "rotate-180" : ""}`} />
+            </button>
+          )}
 
-            {/* Info callout */}
+          {/* Info callouts */}
+          <div className="px-3.5 pb-3">
             {paymentMethod === "pay_on_delivery" && (
-              <div className="mt-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[10px] text-emerald-800">
-                Pay cash or card when the courier arrives.
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[10px] text-emerald-800 flex items-center gap-2">
+                <Truck className="w-3.5 h-3.5 shrink-0" />Pay cash or POS when the courier arrives.
+              </div>
+            )}
+            {paymentMethod === "stripe_card" && (
+              <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-[10px] text-blue-800 flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />Secure card payment powered by Stripe.
               </div>
             )}
             {(paymentMethod === "ceb_link" || paymentMethod === "telebirr") && (
-              <div className="mt-2 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[10px] text-amber-800">
-                Coming soon — please use Pay on Delivery.
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[10px] text-amber-800 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 shrink-0" />Coming soon — please use Pay on Delivery.
               </div>
             )}
           </div>
@@ -1701,19 +1675,17 @@ export default function CheckoutPage() {
                   </section>
                 ) : (
                   <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                      <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                        <WalletCards className="w-4 h-4 text-slate-500" /> Payment
-                        Method
-                      </h2>
+                    <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      <h2 className="font-semibold text-slate-900 text-sm">Payment</h2>
+                      <span className="ml-auto text-[10px] text-slate-400">Secure &amp; encrypted</span>
                     </div>
-                    <div className="p-4 space-y-2">
+                    <div className="divide-y divide-slate-100">
                       {PAYMENT_OPTIONS.map((opt) => {
                         const selected = paymentMethod === opt.id;
                         const Icon = opt.Icon;
                         const isLocked = opt.status === "locked";
                         const isComingSoon = opt.status === "coming_soon";
-                        const isActive = opt.status === "active";
 
                         return (
                           <button
@@ -1723,124 +1695,68 @@ export default function CheckoutPage() {
                               if (!isLocked) setPaymentMethod(opt.id);
                             }}
                             disabled={isLocked}
-                            className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-left text-xs transition-all
-                              ${
-                                selected && isActive
-                                  ? "border-emerald-400 bg-emerald-50/60 shadow-sm"
-                                  : ""
-                              }
-                              ${
-                                selected && isComingSoon
-                                  ? "border-amber-400 bg-amber-50/60 shadow-sm"
-                                  : ""
-                              }
-                              ${
-                                !selected && !isLocked
-                                  ? "border-slate-200 bg-white hover:bg-slate-50"
-                                  : ""
-                              }
-                              ${
-                                isLocked
-                                  ? "border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed"
-                                  : ""
-                              }
-                            `}
+                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                              isLocked ? "opacity-40 cursor-not-allowed" : "hover:bg-slate-50"
+                            }`}
                           >
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-6 h-6 rounded-full flex items-center justify-center
-                                ${
-                                  selected && isActive
-                                    ? "bg-emerald-500 text-white"
-                                    : ""
-                                }
-                                ${
-                                  selected && isComingSoon
-                                    ? "bg-amber-400 text-slate-900"
-                                    : ""
-                                }
-                                ${
-                                  !selected && !isLocked
-                                    ? "bg-slate-100 text-slate-500"
-                                    : ""
-                                }
-                                ${
-                                  isLocked ? "bg-slate-200 text-slate-400" : ""
-                                }
-                              `}
-                              >
-                                <Icon className="w-3.5 h-3.5" />
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              selected ? "bg-slate-900" : isComingSoon ? "bg-amber-50" : "bg-slate-100"
+                            }`}>
+                              <Icon className={`w-4 h-4 ${selected ? "text-white" : isComingSoon ? "text-amber-600" : "text-slate-500"}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-900 text-xs">{opt.label}</span>
+                                {isComingSoon && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700">
+                                    <Clock className="w-2.5 h-2.5 mr-0.5" /> Soon
+                                  </span>
+                                )}
+                                {isLocked && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-500">
+                                    <Lock className="w-2.5 h-2.5 mr-0.5" /> Locked
+                                  </span>
+                                )}
                               </div>
-                              <div>
-                                <div className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
-                                  {opt.label}
-                                  {isComingSoon && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold">
-                                      <Clock className="w-2.5 h-2.5 mr-0.5" /> Coming
-                                      Soon
-                                    </span>
-                                  )}
-                                  {isLocked && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 text-[9px] font-bold">
-                                      <Lock className="w-2.5 h-2.5 mr-0.5" /> Locked
-                                    </span>
-                                  )}
-                                </div>
-                                <div
-                                  className={`text-[10px] ${
-                                    isLocked ? "text-slate-400" : "text-slate-500"
-                                  }`}
-                                >
-                                  {opt.description}
-                                </div>
+                              <div className={`text-[10px] mt-0.5 ${isLocked ? "text-slate-400" : "text-slate-500"}`}>
+                                {opt.badge}
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold ${
-                                  isLocked
-                                    ? "bg-slate-200 text-slate-400"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                {opt.badge}
-                              </span>
-                              {selected && isActive && (
-                                <span className="text-[10px] text-emerald-700 font-semibold">
-                                  Selected
-                                </span>
-                              )}
-                              {selected && isComingSoon && (
-                                <span className="text-[10px] text-amber-700 font-semibold">
-                                  Selected
-                                </span>
-                              )}
+                            {/* Radio circle */}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                              selected ? "border-emerald-500 bg-emerald-500" : "border-slate-300"
+                            }`}>
+                              {selected && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                           </button>
                         );
                       })}
+                    </div>
 
-                      {paymentMethod === "ceb_link" && (
-                        <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-start gap-2">
-                          <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>
-                            CEB Link is coming soon. Please use Pay on Delivery.
-                          </span>
-                        </div>
-                      )}
-
-                      {paymentMethod === "telebirr" && (
-                        <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-start gap-2">
-                          <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>
-                            Telebirr is coming soon. Please use Pay on Delivery.
-                          </span>
-                        </div>
-                      )}
-
+                    {/* Info callouts */}
+                    <div className="px-4 pb-3">
                       {paymentMethod === "pay_on_delivery" && (
-                        <div className="mt-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">
-                          Please prepare cash or card when the courier arrives.
+                        <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800 flex items-center gap-2">
+                          <Truck className="w-3.5 h-3.5 shrink-0" />
+                          Pay cash or POS when the courier arrives.
+                        </div>
+                      )}
+                      {paymentMethod === "stripe_card" && (
+                        <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-800 flex items-center gap-2">
+                          <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                          Secure card payment powered by Stripe.
+                        </div>
+                      )}
+                      {paymentMethod === "ceb_link" && (
+                        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          CEB Link is coming soon. Please use Pay on Delivery.
+                        </div>
+                      )}
+                      {paymentMethod === "telebirr" && (
+                        <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          Telebirr is coming soon. Please use Pay on Delivery.
                         </div>
                       )}
                     </div>
