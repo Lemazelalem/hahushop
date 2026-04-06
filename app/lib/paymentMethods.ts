@@ -7,6 +7,7 @@ export type PaymentMethodId =
   | "cbe_birr"
   | "pay_on_delivery"
   | "cash_on_delivery"
+  | "stripe_card"
   | "card"
   | "apple_pay"
   | "google_pay"
@@ -33,6 +34,8 @@ export function getPaymentMethodLabel(
     case "pay_on_delivery":
     case "cash_on_delivery": // FIX: DB stores this variant
       return "Cash on delivery";
+    case "stripe_card":
+      return "Card (Stripe)";
     case "card":
       return "Card (coming soon)";
     case "apple_pay":

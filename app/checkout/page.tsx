@@ -53,6 +53,7 @@ type ApprovedProduct = {
 
 type PaymentMethod =
   | "card"
+  | "stripe_card"
   | "apple_pay"
   | "google_pay"
   | "paypal"
@@ -64,6 +65,7 @@ type PaymentMethod =
 
 const ALLOWED_PAYMENT_METHODS: PaymentMethod[] = [
   "pay_on_delivery",
+  "stripe_card",
   "ceb_link",
   "telebirr",
   "business_credit",
@@ -71,6 +73,7 @@ const ALLOWED_PAYMENT_METHODS: PaymentMethod[] = [
 
 const ACTIVE_PAYMENT_METHODS: PaymentMethod[] = [
   "pay_on_delivery",
+  "stripe_card",
   "business_credit",
 ];
 
@@ -112,8 +115,16 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
     status: "coming_soon",
   },
   {
-    id: "card",
+    id: "stripe_card",
     label: "Credit / Debit Card",
+    badge: "Visa / Mastercard (test mode)",
+    description: "Pay securely with any supported bank card.",
+    Icon: CreditCard,
+    status: "active",
+  },
+  {
+    id: "card",
+    label: "Credit / Debit Card (legacy)",
     badge: "Visa / Mastercard",
     description: "Pay securely with any supported bank card.",
     Icon: CreditCard,
@@ -666,6 +677,8 @@ export default function CheckoutPage() {
           ? "wallet_credit"
           : paymentMethod === "pay_on_delivery"
           ? "cash_on_delivery"
+          : paymentMethod === "stripe_card"
+          ? "stripe_card"
           : paymentMethod;
 
       const termDays =
@@ -777,6 +790,29 @@ export default function CheckoutPage() {
         console.warn("order_payments insert:", e);
       }
 
+      // ── Stripe card flow: create PaymentIntent then redirect ──
+      if (paymentMethod === "stripe_card") {
+        try {
+          const piRes = await fetch("/api/checkout/create-payment-intent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId }),
+          });
+          const piData = await piRes.json();
+          if (!piRes.ok || !piData.clientSecret) {
+            setOrderError(piData.error || "Could not start card payment.");
+            return;
+          }
+          // Store for future Stripe Elements confirmation step
+          // For now, show success — actual card form will be added in a later step
+          console.log("✅ Stripe PaymentIntent created:", piData.paymentIntentId);
+        } catch (piErr: any) {
+          console.error("Stripe PI error:", piErr);
+          setOrderError("Could not connect to payment service. Please try again.");
+          return;
+        }
+      }
+
       const successMsg =
         paymentMethod === "business_credit"
           ? `Order placed on ${
@@ -784,6 +820,8 @@ export default function CheckoutPage() {
                 ? "Net-60"
                 : "Net-30"
             } credit. Invoice will be sent to your organization.`
+          : paymentMethod === "stripe_card"
+          ? "Order placed! Card payment is being processed."
           : "Order placed! Please prepare payment when the courier arrives.";
 
       // Save order summary BEFORE clearing so we have the data for the overlay
