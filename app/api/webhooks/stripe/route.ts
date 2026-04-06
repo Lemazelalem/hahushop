@@ -61,12 +61,20 @@ export async function POST(req: NextRequest) {
       const orderId = pi.metadata?.order_id;
       if (!orderId) break;
 
-      // Update order_payments
+      // Fetch existing payload so we merge instead of overwriting
+      const { data: existingRec } = await supabase
+        .from("order_payments")
+        .select("id, raw_payload")
+        .eq("order_id", orderId)
+        .eq("method", "stripe_card")
+        .maybeSingle();
+
       await supabase
         .from("order_payments")
         .update({
           status: "failed",
           raw_payload: {
+            ...(existingRec?.raw_payload ?? {}),
             stripe_payment_intent_id: pi.id,
             failure_message: pi.last_payment_error?.message || "Payment failed",
           },
