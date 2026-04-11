@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
     }
 
+    console.log("[send-confirmation] request received", { orderId });
+
     const supabase = getSupabaseAdmin();
 
     // Fetch order + user email
@@ -239,6 +241,12 @@ HahuShop · Ethiopia's Smart Marketplace`;
       subject: `Order Confirmed! #${shortId} — HahuShop`,
       html,
       text,
+    });
+
+    console.log("[send-confirmation] email sent", {
+      orderId,
+      email,
+      shortId,
     });
 
     return NextResponse.json({ sent: true });

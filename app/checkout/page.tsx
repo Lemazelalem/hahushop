@@ -829,12 +829,22 @@ export default function CheckoutPage() {
 
       setOrderSuccess(successMsg);
 
-      // Send order confirmation email (fire-and-forget — don't block checkout)
-      fetch("/api/orders/send-confirmation", {
+      // Let the confirmation request continue even if we navigate away right after checkout.
+      void fetch("/api/orders/send-confirmation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId }),
-      }).catch((e) => console.warn("Confirmation email failed:", e));
+        keepalive: true,
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res
+              .json()
+              .catch(() => ({ error: "Unknown confirmation email error" }));
+            console.warn("Confirmation email failed:", data.error || res.status);
+          }
+        })
+        .catch((e) => console.warn("Confirmation email failed:", e));
 
       console.log("✨ Order success overlay should be visible now");
       setTimeout(() => {
