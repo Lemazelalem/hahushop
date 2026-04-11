@@ -2,11 +2,7 @@
 // NEVER import from client components — server-side only (API routes)
 import nodemailer from "nodemailer";
 
-let _transporter: nodemailer.Transporter | null = null;
-
 export function getMailer(): nodemailer.Transporter {
-  if (_transporter) return _transporter;
-
   const host = process.env.SMTP_HOST || "mail.privateemail.com";
   const port = Number(process.env.SMTP_PORT || 465);
   const user = process.env.SMTP_USER || "";
@@ -16,14 +12,14 @@ export function getMailer(): nodemailer.Transporter {
     throw new Error("SMTP_USER and SMTP_PASS must be set in .env.local");
   }
 
-  _transporter = nodemailer.createTransport({
+  // Create a fresh transporter per call — avoids stale/idle SMTP connections
+  // when the serverless function instance is reused across multiple orders.
+  return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
   });
-
-  return _transporter;
 }
 
 export const SENDER_ADDRESS =
