@@ -321,6 +321,23 @@ export default function CheckoutPage() {
     useState<PaymentMethod>("pay_on_delivery");
   const [paymentExpanded, setPaymentExpanded] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [usdRate, setUsdRate] = useState<number | null>(null);
+
+  // Fetch live ETB→USD rate when Stripe is selected
+  useEffect(() => {
+    if (paymentMethod !== "stripe_card") return;
+    let alive = true;
+    fetch("https://api.exchangerate-api.com/v4/latest/ETB")
+      .then((r) => r.json())
+      .then((data) => {
+        if (alive && data?.rates?.USD) setUsdRate(data.rates.USD);
+      })
+      .catch(() => {
+        // fallback: approximate rate if API fails
+        if (alive) setUsdRate(0.0175);
+      });
+    return () => { alive = false; };
+  }, [paymentMethod]);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   // ── NEW: controls the full-screen success overlay ──
@@ -1245,6 +1262,11 @@ export default function CheckoutPage() {
             <div>
               <div className="text-[10px] font-semibold text-slate-500">Total</div>
               <div className="text-[20px] leading-none font-black text-slate-900 mt-0.5">{money(totalCents)}</div>
+              {paymentMethod === "stripe_card" && usdRate && (
+                <div className="text-[11px] font-bold mt-0.5" style={{ color: "#e0356a" }}>
+                  ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
+                </div>
+              )}
             </div>
             <div className="text-right text-[9px] text-slate-500">
               {isBusinessOrder ? "Invoice later" : "Pay on delivery"}
@@ -1269,7 +1291,11 @@ export default function CheckoutPage() {
       <div className="min-w-0 flex-1">
         <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
         <div className="text-[20px] leading-none font-black text-slate-900">{money(totalCents)}</div>
-        <div className="text-[9px] text-slate-500">{displayedItemCount} item{displayedItemCount !== 1 ? "s" : ""} · free shipping</div>
+        {paymentMethod === "stripe_card" && usdRate ? (
+          <div className="text-[9px] font-bold" style={{ color: "#e0356a" }}>≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD · free shipping</div>
+        ) : (
+          <div className="text-[9px] text-slate-500">{displayedItemCount} item{displayedItemCount !== 1 ? "s" : ""} · free shipping</div>
+        )}
       </div>
       <button
         type="button"
@@ -1831,9 +1857,16 @@ export default function CheckoutPage() {
                         <span className="text-sm font-bold text-slate-900">
                           Total
                         </span>
-                        <span className="text-xl font-bold text-slate-900">
-                          {money(totalCents)}
-                        </span>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-slate-900">
+                            {money(totalCents)}
+                          </div>
+                          {paymentMethod === "stripe_card" && usdRate && (
+                            <div className="text-xs font-bold mt-0.5" style={{ color: "#e0356a" }}>
+                              ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {isBusinessOrder && (
                         <div className="text-[11px] text-slate-500 text-right">
