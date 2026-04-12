@@ -479,7 +479,7 @@ function PublicEmployeeSignupPageContent() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 md:px-6 md:py-10 bg-gradient-to-br from-slate-50 to-blue-50">
+    <main className="min-h-screen px-4 py-6 pb-28 md:pb-10 md:px-6 md:py-10 bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="mx-auto max-w-md">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 text-white text-3xl shadow-xl shadow-orange-500/30 mb-3" aria-hidden="true">
