@@ -867,6 +867,8 @@ export default function AdminOrdersPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [bankSettings, setBankSettings] = useState<BankSettings | null>(null);
+  const [orderItemsMap, setOrderItemsMap] = useState<Record<string, any[]>>({});
+  const [orderSellersMap, setOrderSellersMap] = useState<Record<string, Record<string, { display_name: string | null; email: string | null; phone: string | null; business_name: string | null }>>>({});
 
   // Payment modal state
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -1190,8 +1192,22 @@ export default function AdminOrdersPage() {
     }
   }, [selectedOrderForPayment, closePaymentModal]);
 
-  const toggleExpand = (orderId: string) =>
+  const toggleExpand = useCallback(async (orderId: string) => {
     setExpandedOrderId((prev) => (prev === orderId ? null : orderId));
+    // Fetch real order items + seller info on first expand
+    if (!orderItemsMap[orderId]) {
+      try {
+        const res = await fetch(`/api/admin/order-items?orderId=${orderId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOrderItemsMap((prev) => ({ ...prev, [orderId]: data.items ?? [] }));
+          setOrderSellersMap((prev) => ({ ...prev, [orderId]: data.sellers ?? {} }));
+        }
+      } catch {
+        // silently ignore — fallback to cart_snapshot
+      }
+    }
+  }, [orderItemsMap]);
 
   /* ── Access denied ── */
 
@@ -1658,90 +1674,144 @@ export default function AdminOrdersPage() {
                           />
 
                           {/* Line items */}
-                          <div className="rounded-2xl bg-white border border-slate-100 overflow-hidden">
-                            <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-700">
-                              <div className="col-span-6">Item</div>
-                              <div className="col-span-2 text-center">Qty</div>
-                              <div className="col-span-2 text-right">Unit price</div>
-                              <div className="col-span-2 text-right">Line total</div>
-                            </div>
+                          {(() => {
+                            const realItems: any[] = orderItemsMap[order.id] ?? [];
+                            const sellers = orderSellersMap[order.id] ?? {};
+                            // Use real order_items if fetched, otherwise fall back to snapshot
+                            const displayItems = realItems.length > 0
+                              ? realItems.map((ri) => ({
+                                  image_url_snapshot: ri.image_url_snapshot,
+                                  emoji_snapshot: ri.emoji_snapshot,
+                                  name_snapshot: ri.name_snapshot,
+                                  product_id: ri.product_id,
+                                  seller_id: ri.seller_id,
+                                  qty: ri.quantity,
+                                  unit_price_cents: ri.price_snapshot_cents,
+                                  line_total_cents: ri.line_total_cents,
+                                  color_name: ri.color_name,
+                                  size_label: ri.size_label,
+                                }))
+                              : items;
 
-                            {items.length === 0 ? (
-                              <div className="px-4 py-3 text-[11px] text-slate-500">
-                                No line item details stored.
-                              </div>
-                            ) : (
-                              items.map((item: any, idx: number) => {
-                                const unitCents = item.unit_price_cents ?? item.price_cents ?? null;
-                                const lineCents =
-                                  item.line_total_cents ??
-                                  (unitCents && item.qty ? unitCents * item.qty : null);
+                            return (
+                              <div className="rounded-2xl bg-white border border-slate-100 overflow-hidden">
+                                <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-700">
+                                  <div className="col-span-6">Item</div>
+                                  <div className="col-span-2 text-center">Qty</div>
+                                  <div className="col-span-2 text-right">Unit price</div>
+                                  <div className="col-span-2 text-right">Line total</div>
+                                </div>
 
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-slate-100 last:border-0 bg-white"
-                                  >
-                                    <div className="col-span-6 flex items-center gap-2">
-                                      {item.image_url_snapshot ? (
-                                        <img
-                                          src={item.image_url_snapshot}
-                                          alt={item.name_snapshot || item.name || "Product"}
-                                          className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-                                        />
-                                      ) : (
-                                        <span className="text-lg">{item.emoji_snapshot || item.emoji || "📦"}</span>
-                                      )}
-                                      <div>
-                                        <div className="text-xs font-semibold text-slate-900">
-                                          {item.name_snapshot || item.name}
-                                        </div>
-                                        {item.product_id && (
-                                          <div className="text-[10px] text-slate-400 font-mono">
-                                            {String(item.product_id).slice(0, 10)}…
+                                {displayItems.length === 0 ? (
+                                  <div className="px-4 py-3 text-[11px] text-slate-500">
+                                    No line item details stored.
+                                  </div>
+                                ) : (
+                                  displayItems.map((item: any, idx: number) => {
+                                    const unitCents = item.unit_price_cents ?? item.price_cents ?? null;
+                                    const lineCents =
+                                      item.line_total_cents ??
+                                      (unitCents && item.qty ? unitCents * item.qty : null);
+                                    const seller = item.seller_id ? sellers[item.seller_id] : null;
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="px-4 py-3 border-b border-slate-100 last:border-0 bg-white"
+                                      >
+                                        <div className="grid grid-cols-12 gap-2">
+                                          <div className="col-span-6 flex items-start gap-2">
+                                            {item.image_url_snapshot ? (
+                                              <img
+                                                src={item.image_url_snapshot}
+                                                alt={item.name_snapshot || item.name || "Product"}
+                                                className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                                              />
+                                            ) : (
+                                              <span className="text-xl leading-none mt-0.5">{item.emoji_snapshot || item.emoji || "📦"}</span>
+                                            )}
+                                            <div className="min-w-0">
+                                              <div className="text-xs font-semibold text-slate-900 leading-tight">
+                                                {item.name_snapshot || item.name}
+                                              </div>
+                                              {(item.color_name || item.size_label) && (
+                                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                                  {[item.color_name, item.size_label].filter(Boolean).join(" · ")}
+                                                </div>
+                                              )}
+                                              {item.kind === "approved_public" && (
+                                                <div className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
+                                                  PE price
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
-                                        )}
-                                        {item.kind === "approved_public" && (
-                                          <div className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
-                                            PE price
+
+                                          <div className="col-span-2 text-center text-xs text-slate-700 self-center">
+                                            {item.qty}
+                                          </div>
+
+                                          <div className="col-span-2 text-right text-xs text-slate-700 self-center">
+                                            {unitCents ? (
+                                              formatMoney(unitCents)
+                                            ) : (
+                                              <span className="text-slate-400">—</span>
+                                            )}
+                                          </div>
+
+                                          <div className="col-span-2 text-right text-xs font-semibold text-slate-900 self-center">
+                                            {lineCents ? (
+                                              formatMoney(lineCents)
+                                            ) : (
+                                              <span className="text-slate-400">—</span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Seller info card */}
+                                        {seller && (
+                                          <div className="mt-2 ml-12 flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                                            <div className="w-6 h-6 rounded-full bg-amber-200 flex items-center justify-center text-[10px] font-bold text-amber-800 flex-shrink-0">
+                                              {(seller.display_name ?? seller.business_name ?? "S").charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                              <div className="text-[11px] font-semibold text-amber-900 truncate">
+                                                {seller.display_name ?? seller.business_name ?? "Seller"}
+                                                {seller.business_name && seller.display_name && seller.business_name !== seller.display_name && (
+                                                  <span className="font-normal text-amber-700 ml-1">· {seller.business_name}</span>
+                                                )}
+                                              </div>
+                                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                                {seller.email && (
+                                                  <span className="text-[10px] text-amber-700 flex items-center gap-0.5">
+                                                    <Mail className="w-2.5 h-2.5" />{seller.email}
+                                                  </span>
+                                                )}
+                                                {seller.phone && (
+                                                  <span className="text-[10px] text-amber-700 flex items-center gap-0.5">
+                                                    <Phone className="w-2.5 h-2.5" />{seller.phone}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
                                           </div>
                                         )}
                                       </div>
-                                    </div>
+                                    );
+                                  })
+                                )}
 
-                                    <div className="col-span-2 text-center text-xs text-slate-700">
-                                      {item.qty}
-                                    </div>
-
-                                    <div className="col-span-2 text-right text-xs text-slate-700">
-                                      {unitCents ? (
-                                        formatMoney(unitCents)
-                                      ) : (
-                                        <span className="text-slate-400">—</span>
-                                      )}
-                                    </div>
-
-                                    <div className="col-span-2 text-right text-xs font-semibold text-slate-900">
-                                      {lineCents ? (
-                                        formatMoney(lineCents)
-                                      ) : (
-                                        <span className="text-slate-400">—</span>
-                                      )}
-                                    </div>
+                                <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 border-t border-slate-100">
+                                  <div className="col-span-8 text-right text-[11px] font-semibold text-slate-700">
+                                    Order total:
                                   </div>
-                                );
-                              })
-                            )}
-
-                            <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 border-t border-slate-100">
-                              <div className="col-span-8 text-right text-[11px] font-semibold text-slate-700">
-                                Order total:
+                                  <div className="col-span-4 text-right text-sm font-bold text-slate-900">
+                                    {formatMoney(order.total_cents)}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="col-span-4 text-right text-sm font-bold text-slate-900">
-                                {formatMoney(order.total_cents)}
-                              </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
 
                           {/* Shipping + payment detail */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
