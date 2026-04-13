@@ -371,67 +371,64 @@ export default function SellerDashboardPage() {
           console.warn("Failed to load seller orders:", e);
         }
 
-        // Load sold items
-        const { data: salesData } = await supabase
-          .from("order_items")
-          .select(`
-            id, product_id, name_snapshot, image_url_snapshot, emoji_snapshot,
-            quantity, line_total_cents, order_id,
-            orders(created_at, status, payment_status)
-          `)
-          .eq("seller_id", user.id)
-          .order("order_id", { ascending: false })
-          .limit(30);
+        // Load sold items + daily stats from the same API response
+        // (avoids a separate client-side query with a PostgREST join that requires a DB foreign key)
+        try {
+          const salesRes = await fetch("/api/seller/orders");
+          if (salesRes.ok) {
+            const { items: salesRaw } = await salesRes.json();
+            if (Array.isArray(salesRaw)) {
+              const mapped: SoldItem[] = (salesRaw as any[])
+                .filter((item) => item.orders?.status !== "cancelled")
+                .map((item) => ({
+                  id: item.id,
+                  product_id: item.product_id ?? "",
+                  name_snapshot: item.name_snapshot,
+                  image_url_snapshot: item.image_url_snapshot,
+                  emoji_snapshot: item.emoji_snapshot,
+                  quantity: item.quantity,
+                  line_total_cents: item.line_total_cents,
+                  order_id: item.order_id,
+                  order_created_at: item.orders?.created_at ?? new Date().toISOString(),
+                  order_status: item.orders?.status ?? "unknown",
+                  order_payment_status: item.orders?.payment_status ?? "unknown",
+                }))
+                .slice(0, 20);
 
-        if (salesData) {
-          const mapped: SoldItem[] = (salesData as any[])
-            .filter((item) => item.orders?.status !== "cancelled")
-            .map((item) => ({
-              id: item.id,
-              product_id: item.product_id,
-              name_snapshot: item.name_snapshot,
-              image_url_snapshot: item.image_url_snapshot,
-              emoji_snapshot: item.emoji_snapshot,
-              quantity: item.quantity,
-              line_total_cents: item.line_total_cents,
-              order_id: item.order_id,
-              order_created_at: item.orders?.created_at ?? new Date().toISOString(),
-              order_status: item.orders?.status ?? "unknown",
-              order_payment_status: item.orders?.payment_status ?? "unknown",
-            }))
-            .slice(0, 20);
+              setSoldItems(mapped);
 
-          setSoldItems(mapped);
+              const todayKey = new Date().toISOString().slice(0, 10);
+              const byProductToday: Record<string, number> = {};
+              const byDay: Record<string, number> = {};
 
-          const todayKey = new Date().toISOString().slice(0, 10);
-          const byProductToday: Record<string, number> = {};
-          const byDay: Record<string, number> = {};
+              for (const s of mapped) {
+                const day = s.order_created_at.slice(0, 10);
+                const qty = Math.max(0, Number(s.quantity ?? 0));
+                byDay[day] = (byDay[day] ?? 0) + qty;
+                if (day === todayKey && s.product_id) {
+                  byProductToday[s.product_id] = (byProductToday[s.product_id] ?? 0) + qty;
+                }
+              }
 
-          for (const s of mapped) {
-            const day = s.order_created_at.slice(0, 10);
-            const qty = Math.max(0, Number(s.quantity ?? 0));
-            byDay[day] = (byDay[day] ?? 0) + qty;
-            if (day === todayKey && s.product_id) {
-              byProductToday[s.product_id] =
-                (byProductToday[s.product_id] ?? 0) + qty;
+              const dailyRows: SalesByDay[] = [];
+              for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const key = d.toISOString().slice(0, 10);
+                dailyRows.push({
+                  dateKey: key,
+                  label: d.toLocaleDateString("en-US", { weekday: "short" }),
+                  units: byDay[key] ?? 0,
+                });
+              }
+
+              setSalesByDay(dailyRows);
+              setSoldByProductToday(byProductToday);
+              setSoldTodayTotal(byDay[todayKey] ?? 0);
             }
           }
-
-          const dailyRows: SalesByDay[] = [];
-          for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-            dailyRows.push({
-              dateKey: key,
-              label: d.toLocaleDateString("en-US", { weekday: "short" }),
-              units: byDay[key] ?? 0,
-            });
-          }
-
-          setSalesByDay(dailyRows);
-          setSoldByProductToday(byProductToday);
-          setSoldTodayTotal(byDay[todayKey] ?? 0);
+        } catch (e) {
+          console.warn("Failed to load sold items:", e);
         }
 
         // Generate activities
