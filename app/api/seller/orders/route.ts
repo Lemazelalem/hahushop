@@ -51,15 +51,19 @@ async function getAuthenticatedSellerId(): Promise<string | null> {
 }
 
 export async function GET() {
+  let step = "init";
   try {
+    step = "auth";
     const sellerId = await getAuthenticatedSellerId();
     if (!sellerId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    step = "db-init";
     const db = getSupabaseAdmin();
 
     // Step 1: Fetch order_items for this seller
+    step = "order_items-query";
     const { data: rawItems, error: itemsErr } = await db
       .from("order_items")
       .select("id, product_id, name_snapshot, emoji_snapshot, image_url_snapshot, quantity, line_total_cents, color_name, size_label, order_id")
@@ -69,14 +73,15 @@ export async function GET() {
 
     if (itemsErr) {
       console.error("[seller/orders] items query error:", itemsErr);
-      return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+      return NextResponse.json({ error: `order_items: ${itemsErr.message}` }, { status: 500 });
     }
 
     if (!rawItems || rawItems.length === 0) {
       return NextResponse.json({ items: [] });
     }
 
-    // Step 2: Fetch the parent orders separately (avoids needing a DB foreign key for PostgREST join)
+    // Step 2: Fetch parent orders separately
+    step = "orders-query";
     const orderIds = [...new Set(rawItems.map((i) => i.order_id))];
     const { data: orders, error: ordersErr } = await db
       .from("orders")
@@ -85,10 +90,11 @@ export async function GET() {
 
     if (ordersErr) {
       console.error("[seller/orders] orders query error:", ordersErr);
-      return NextResponse.json({ error: ordersErr.message }, { status: 500 });
+      return NextResponse.json({ error: `orders: ${ordersErr.message}` }, { status: 500 });
     }
 
-    // Step 3: Attach order details to each item
+    // Step 3: Merge
+    step = "merge";
     const orderMap = new Map((orders ?? []).map((o) => [o.id, o]));
     const items = rawItems.map((item) => ({
       ...item,
@@ -97,8 +103,8 @@ export async function GET() {
 
     return NextResponse.json({ items });
   } catch (err: unknown) {
-    console.error("[seller/orders] error:", err);
+    console.error(`[seller/orders] error at step '${step}':`, err);
     const msg = err instanceof Error ? err.message : "Failed to load orders";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: `[${step}] ${msg}` }, { status: 500 });
   }
 }
