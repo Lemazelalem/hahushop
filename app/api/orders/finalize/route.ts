@@ -84,7 +84,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Insert order_items using service role (bypasses RLS)
+    // Insert order_items using service role (bypasses RLS).
+    // Only include columns confirmed to exist in the DB schema.
     const payload = items.map((s) => ({
       order_id: orderId,
       product_id: s.product_id,
@@ -95,11 +96,8 @@ export async function POST(req: NextRequest) {
       quantity: s.qty,
       price_snapshot_cents: s.unit_price_cents,
       line_total_cents: s.line_total_cents,
-      price_tier: s.price_tier,
       color_name: s.color_name,
       size_label: s.size_label,
-      color_variant_id: s.color_variant_id,
-      size_variant_id: s.size_variant_id,
     }));
 
     const { error: insertErr } = await db.from("order_items").insert(payload);
