@@ -27,7 +27,10 @@ import {
   Filter,
   MoreHorizontal,
   ArrowUpRight,
-  Store
+  Store,
+  Edit3,
+  Save,
+  X,
 } from "lucide-react";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
@@ -42,7 +45,7 @@ type ProductRow = {
   seller_price_cents: number | null;
   final_price_cents: number | null;
   stock_quantity?: number | null;
-  size_variants?: Array<{ stock?: number | null }> | null;
+  size_variants?: Array<{ id: string; label: string; stock: number; priceAdjustCents?: number }> | null;
   category?: string;
 };
 
@@ -191,6 +194,13 @@ export default function SellerDashboardPage() {
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [infoSaving, setInfoSaving] = useState(false);
   const [infoSaveMsg, setInfoSaveMsg] = useState<string | null>(null);
+  const [editingStockId, setEditingStockId] = useState<string | null>(null);
+  const [stockDraft, setStockDraft] = useState<{
+    simpleQty: string;
+    variants: Array<{ id: string; label: string; stock: string }>;
+  } | null>(null);
+  const [stockSaving, setStockSaving] = useState(false);
+  const [stockSaveMsg, setStockSaveMsg] = useState<string | null>(null);
   const [bankForm, setBankForm] = useState<PayoutBankForm>({
     bankName: "",
     accountHolder: "",
@@ -208,6 +218,67 @@ export default function SellerDashboardPage() {
     subcity: "",
     notes: "",
   });
+
+  const handleStartEditStock = (productId: string) => {
+    const p = products.find((pr) => pr.id === productId);
+    if (!p) return;
+    const isVariant = Array.isArray(p.size_variants) && p.size_variants.length > 0;
+    setEditingStockId(productId);
+    setStockSaveMsg(null);
+    setStockDraft({
+      simpleQty: isVariant ? "" : String(p.stock_quantity ?? 0),
+      variants: isVariant
+        ? p.size_variants!.map((v) => ({ id: v.id, label: v.label, stock: String(v.stock ?? 0) }))
+        : [],
+    });
+  };
+
+  const handleSaveStock = async (productId: string) => {
+    const p = products.find((pr) => pr.id === productId);
+    if (!p || !stockDraft) return;
+    setStockSaving(true);
+    setStockSaveMsg(null);
+    const isVariant = stockDraft.variants.length > 0;
+
+    if (isVariant) {
+      const updatedVariants = p.size_variants!.map((v) => {
+        const d = stockDraft.variants.find((dv) => dv.id === v.id);
+        return d ? { ...v, stock: Math.max(0, parseInt(d.stock) || 0) } : v;
+      });
+      const totalQty = updatedVariants.reduce((s, v) => s + v.stock, 0);
+      const { error } = await supabase
+        .from("products")
+        .update({ size_variants: updatedVariants, stock_quantity: totalQty })
+        .eq("id", productId);
+      if (error) {
+        setStockSaveMsg("Error: " + error.message);
+      } else {
+        setProducts((prev) =>
+          prev.map((pr) =>
+            pr.id === productId ? { ...pr, size_variants: updatedVariants, stock_quantity: totalQty } : pr
+          )
+        );
+        setStockSaveMsg("Saved!");
+        setTimeout(() => { setEditingStockId(null); setStockSaveMsg(null); }, 900);
+      }
+    } else {
+      const newQty = Math.max(0, parseInt(stockDraft.simpleQty) || 0);
+      const { error } = await supabase
+        .from("products")
+        .update({ stock_quantity: newQty })
+        .eq("id", productId);
+      if (error) {
+        setStockSaveMsg("Error: " + error.message);
+      } else {
+        setProducts((prev) =>
+          prev.map((pr) => pr.id === productId ? { ...pr, stock_quantity: newQty } : pr)
+        );
+        setStockSaveMsg("Saved!");
+        setTimeout(() => { setEditingStockId(null); setStockSaveMsg(null); }, 900);
+      }
+    }
+    setStockSaving(false);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -620,8 +691,7 @@ export default function SellerDashboardPage() {
       .sort((a, b) => {
         const rank = { out: 0, low: 1, ok: 2, unknown: 3 };
         return rank[a.level] - rank[b.level] || b.soldToday - a.soldToday;
-      })
-      .slice(0, 8);
+      });
   }, [products, soldByProductToday, liveStockDeltaByProduct]);
 
   const formatMoney = (cents: number | null | undefined) => {
@@ -1083,46 +1153,113 @@ export default function SellerDashboardPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Stock Alerts</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Stock — All Products</div>
               {stockRows.length === 0 ? (
                 <p className="text-sm text-slate-500">No stock data yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {stockRows.map((row) => (
-                    <div
-                      key={row.productId}
-                      className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 truncate">{row.productName}</p>
-                        <p className="text-xs text-slate-500">Sold today: {row.soldToday}</p>
+                  {stockRows.map((row) => {
+                    const isEditing = editingStockId === row.productId;
+                    const product = products.find((p) => p.id === row.productId);
+                    const isVariant = Array.isArray(product?.size_variants) && (product?.size_variants?.length ?? 0) > 0;
+                    return (
+                      <div
+                        key={row.productId}
+                        className="rounded-xl border border-slate-200/70 bg-white overflow-hidden"
+                      >
+                        {/* Row header */}
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{row.productName}</p>
+                            <p className="text-xs text-slate-500">Sold today: {row.soldToday}</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-3">
+                            <div className="text-right">
+                              <p className={`text-sm font-bold ${
+                                row.level === "out" ? "text-rose-700"
+                                : row.level === "low" ? "text-amber-700"
+                                : row.level === "unknown" ? "text-slate-500"
+                                : "text-emerald-700"
+                              }`}>
+                                {row.liveStock === null ? "—" : `${row.liveStock} left`}
+                              </p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                                {row.level === "out" ? "Out" : row.level === "low" ? "Low" : row.level === "unknown" ? "Unknown" : "Healthy"}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => isEditing ? setEditingStockId(null) : handleStartEditStock(row.productId)}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+                              title={isEditing ? "Cancel" : "Edit stock"}
+                            >
+                              {isEditing ? <X className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Inline edit form */}
+                        {isEditing && stockDraft && (
+                          <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
+                            {isVariant ? (
+                              <div className="space-y-2">
+                                {stockDraft.variants.map((v, i) => (
+                                  <div key={v.id} className="flex items-center gap-2">
+                                    <span className="text-xs text-slate-600 w-20 truncate">{v.label}</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={v.stock}
+                                      onChange={(e) => setStockDraft((prev) => {
+                                        if (!prev) return prev;
+                                        const updated = [...prev.variants];
+                                        updated[i] = { ...updated[i], stock: e.target.value };
+                                        return { ...prev, variants: updated };
+                                      })}
+                                      className="w-20 text-sm border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                    <span className="text-xs text-slate-400">units</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-600">Stock quantity</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={stockDraft.simpleQty}
+                                  onChange={(e) => setStockDraft((prev) => prev ? { ...prev, simpleQty: e.target.value } : prev)}
+                                  className="w-24 text-sm border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                />
+                                <span className="text-xs text-slate-400">units</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 mt-3">
+                              <button
+                                onClick={() => handleSaveStock(row.productId)}
+                                disabled={stockSaving}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                              >
+                                <Save className="w-3 h-3" />
+                                {stockSaving ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                onClick={() => { setEditingStockId(null); setStockSaveMsg(null); }}
+                                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              {stockSaveMsg && (
+                                <span className={`text-xs font-medium ${stockSaveMsg.startsWith("Error") ? "text-rose-600" : "text-emerald-600"}`}>
+                                  {stockSaveMsg}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right ml-3">
-                        <p
-                          className={`text-sm font-bold ${
-                            row.level === "out"
-                              ? "text-rose-700"
-                              : row.level === "low"
-                              ? "text-amber-700"
-                              : row.level === "unknown"
-                              ? "text-slate-500"
-                              : "text-emerald-700"
-                          }`}
-                        >
-                          {row.liveStock === null ? "—" : `${row.liveStock} left`}
-                        </p>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                          {row.level === "out"
-                            ? "Out"
-                            : row.level === "low"
-                            ? "Low"
-                            : row.level === "unknown"
-                            ? "Unknown"
-                            : "Healthy"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
