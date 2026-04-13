@@ -750,30 +750,19 @@ export default function CheckoutPage() {
       console.log("✅ Order created successfully:", inserted.id);
       const orderId = inserted.id as string;
 
+      // Finalize order server-side: inserts order_items and decrements stock
+      // using service role to bypass any RLS policies on those tables.
       try {
-        const payload = snapshotItems.map((s) => ({
-          order_id: orderId,
-          product_id: s.product_id,
-          seller_id: s.seller_id ?? null,
-          name_snapshot: s.name_snapshot,
-          emoji_snapshot: s.emoji_snapshot,
-          image_url_snapshot: s.image_url_snapshot ?? null,
-          quantity: s.qty,
-          price_snapshot_cents: s.unit_price_cents,
-          line_total_cents: s.line_total_cents,
-          price_tier: s.price_tier,
-          color_name: s.color_name,
-          size_label: s.size_label,
-          color_variant_id: s.color_variant_id,
-          size_variant_id: s.size_variant_id,
-        }));
-
-        if (payload.length) {
-          const { error } = await supabase.from("order_items").insert(payload);
-          if (error) console.warn("order_items insert:", error);
+        const finalizeRes = await fetch("/api/orders/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, items: snapshotItems }),
+        });
+        if (!finalizeRes.ok) {
+          console.warn("order finalize failed:", await finalizeRes.text());
         }
       } catch (e) {
-        console.warn("order_items skipped:", e);
+        console.warn("order finalize skipped:", e);
       }
 
       try {
