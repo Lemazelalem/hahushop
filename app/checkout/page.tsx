@@ -1263,8 +1263,8 @@ export default function CheckoutPage() {
               <div className="text-[10px] font-semibold text-slate-500">Total</div>
               <div className="text-[20px] leading-none font-black text-slate-900 mt-0.5">{money(totalCents)}</div>
               {paymentMethod === "stripe_card" && usdRate && (
-                <div className="text-[11px] font-bold mt-0.5" style={{ color: "#e0356a" }}>
-                  ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
+                <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-black tracking-wide" style={{ background: "#fff0f4", color: "#e0356a", border: "1px solid #fbb6ce" }}>
+                  ≈ ${(totalCents / 100 * usdRate).toFixed(2)} <span className="opacity-70">USD</span>
                 </div>
               )}
             </div>
@@ -1292,7 +1292,12 @@ export default function CheckoutPage() {
         <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
         <div className="text-[20px] leading-none font-black text-slate-900">{money(totalCents)}</div>
         {paymentMethod === "stripe_card" && usdRate ? (
-          <div className="text-[9px] font-bold" style={{ color: "#e0356a" }}>≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD · free shipping</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide" style={{ background: "#fff0f4", color: "#e0356a", border: "1px solid #fbb6ce" }}>
+              ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
+            </span>
+            <span className="text-[9px] text-slate-400">· free shipping</span>
+          </div>
         ) : (
           <div className="text-[9px] text-slate-500">{displayedItemCount} item{displayedItemCount !== 1 ? "s" : ""} · free shipping</div>
         )}
@@ -1862,8 +1867,8 @@ export default function CheckoutPage() {
                             {money(totalCents)}
                           </div>
                           {paymentMethod === "stripe_card" && usdRate && (
-                            <div className="text-xs font-bold mt-0.5" style={{ color: "#e0356a" }}>
-                              ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
+                            <div className="inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full text-xs font-black tracking-wide" style={{ background: "#fff0f4", color: "#e0356a", border: "1px solid #fbb6ce" }}>
+                              ≈ ${(totalCents / 100 * usdRate).toFixed(2)} <span className="opacity-70">USD</span>
                             </div>
                           )}
                         </div>
