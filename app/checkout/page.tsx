@@ -1,7 +1,7 @@
 // app/checkout/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useMiniCart } from "@/components/MiniCartProvider";
@@ -381,6 +381,10 @@ export default function CheckoutPage() {
 
   /* ── Persist & restore shipping details via localStorage ───────────────── */
 
+  // Guard: skip the first run of the save effect so it never fires with the
+  // initial empty state, which would overwrite any previously saved data.
+  const shippingSaveReady = useRef(false);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SHIPPING_KEY);
@@ -398,6 +402,10 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
+    if (!shippingSaveReady.current) {
+      shippingSaveReady.current = true;
+      return;
+    }
     try {
       localStorage.setItem(SHIPPING_KEY, JSON.stringify({
         fullName: shippingFullName,
