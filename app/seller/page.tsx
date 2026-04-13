@@ -258,6 +258,8 @@ export default function SellerDashboardPage() {
             pr.id === productId ? { ...pr, size_variants: updatedVariants, stock_quantity: totalQty } : pr
           )
         );
+        // Clear live delta — the new saved value is the ground truth
+        setLiveStockDeltaByProduct((prev) => { const n = { ...prev }; delete n[productId]; return n; });
         setStockSaveMsg("Saved!");
         setTimeout(() => { setEditingStockId(null); setStockSaveMsg(null); }, 900);
       }
@@ -273,6 +275,8 @@ export default function SellerDashboardPage() {
         setProducts((prev) =>
           prev.map((pr) => pr.id === productId ? { ...pr, stock_quantity: newQty } : pr)
         );
+        // Clear live delta — the new saved value is the ground truth
+        setLiveStockDeltaByProduct((prev) => { const n = { ...prev }; delete n[productId]; return n; });
         setStockSaveMsg("Saved!");
         setTimeout(() => { setEditingStockId(null); setStockSaveMsg(null); }, 900);
       }

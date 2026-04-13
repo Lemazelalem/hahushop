@@ -156,17 +156,17 @@ export async function POST(req: NextRequest) {
           else console.log("[finalize] size_variants decremented for product:", productId);
         }
 
-        // Decrement stock_quantity for simple (non-variant) items
+        // Decrement stock_quantity for simple (non-variant) items.
+        // Uses an atomic RPC to avoid read-then-write race conditions when
+        // two orders arrive simultaneously for the same product.
         if (simpleItems.length > 0) {
           const totalQty = simpleItems.reduce((s, i) => s + i.qty, 0);
-          const currentStock = typeof product.stock_quantity === "number" ? product.stock_quantity : 0;
-          const newStock = Math.max(0, currentStock - totalQty);
-          const { error: stockErr } = await db
-            .from("products")
-            .update({ stock_quantity: newStock })
-            .eq("id", productId);
+          const { error: stockErr } = await db.rpc("decrement_stock", {
+            p_product_id: productId,
+            p_qty: totalQty,
+          });
           if (stockErr) console.warn("[finalize] stock_quantity decrement error:", stockErr, productId);
-          else console.log("[finalize] stock_quantity decremented for product:", productId, "new stock:", newStock);
+          else console.log("[finalize] stock_quantity decremented for product:", productId, "by:", totalQty);
         }
       }
 
