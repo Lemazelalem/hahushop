@@ -318,6 +318,7 @@ export default function CheckoutPage() {
   const [shippingKebele, setShippingKebele] = useState("");
   const [shippingStreet, setShippingStreet] = useState("");
   const [shippingDetails, setShippingDetails] = useState("");
+  const [deliveryCollapsed, setDeliveryCollapsed] = useState(false);
 
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("pay_on_delivery");
@@ -398,6 +399,7 @@ export default function CheckoutPage() {
       if (d.kebele)    setShippingKebele(d.kebele);
       if (d.street)    setShippingStreet(d.street);
       if (d.details)   setShippingDetails(d.details);
+      if (d.fullName && d.phone && d.region && d.city) setDeliveryCollapsed(true);
     } catch {}
   }, []);
 
@@ -1127,62 +1129,93 @@ export default function CheckoutPage() {
 
     {/* ── Delivery ── */}
     <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-      <div className="px-3 py-2 border-b border-slate-100">
+      <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
         <span className="text-[12px] font-black text-slate-900">Delivery details</span>
+        {deliveryCollapsed && (
+          <button
+            onClick={() => setDeliveryCollapsed(false)}
+            className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700"
+          >
+            Edit
+          </button>
+        )}
       </div>
-      <div className="p-2.5">
-        <div className="grid grid-cols-2 gap-2">
-          {/* Full Name */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><User className="w-3 h-3" />Full Name<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingFullName} onChange={(e) => setShippingFullName(e.target.value)} placeholder="Abebe Kebede" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* Phone */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Phone className="w-3 h-3" />Phone<span className="text-rose-500">*</span></label>
-            <input type="tel" value={shippingPhone} onChange={(e) => setShippingPhone(e.target.value)} placeholder="0911 234 567" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* Region */}
-          <div>
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Building2 className="w-3 h-3" />Region<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingRegion} onChange={(e) => setShippingRegion(e.target.value)} placeholder="Addis Ababa" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* City */}
-          <div>
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Home className="w-3 h-3" />City<span className="text-rose-500">*</span></label>
-            <input type="text" value={shippingCity} onChange={(e) => setShippingCity(e.target.value)} placeholder="Kirkos" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* Woreda */}
-          <div>
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Woreda</label>
-            <input type="text" value={shippingWoreda} onChange={(e) => setShippingWoreda(e.target.value)} placeholder="Woreda 08" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* Kebele */}
-          <div>
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Kebele</label>
-            <input type="text" value={shippingKebele} onChange={(e) => setShippingKebele(e.target.value)} placeholder="Kebele 15" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
-          {/* Street */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Navigation className="w-3 h-3" />Street / Landmark</label>
-            <input type="text" value={shippingStreet} onChange={(e) => setShippingStreet(e.target.value)} placeholder="Near Edna Mall" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
-          </div>
+
+      {deliveryCollapsed ? (
+        /* ── Collapsed summary ── */
+        <div className="px-3 py-2.5">
+          <p className="text-[13px] font-semibold text-slate-900">{shippingFullName}</p>
+          <p className="text-[12px] text-slate-500 mt-0.5">{shippingPhone}</p>
+          <p className="text-[12px] text-slate-500 mt-0.5">
+            {[shippingRegion, shippingCity, shippingWoreda, shippingKebele].filter(Boolean).join(", ")}
+          </p>
+          {shippingStreet && <p className="text-[12px] text-slate-400 mt-0.5">{shippingStreet}</p>}
+          {shippingDetails && <p className="text-[11px] text-slate-400 mt-0.5 italic">{shippingDetails}</p>}
         </div>
-        {/* Instructions */}
-        <div className="mt-2">
-          <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><MessageSquare className="w-3 h-3" />Delivery Instructions</label>
-          <textarea
-            value={shippingDetails}
-            onChange={(e) => { const words = e.target.value.trim().split(/\s+/).filter(Boolean); if (words.length <= 100) setShippingDetails(e.target.value); }}
-            rows={2}
-            placeholder="Call when arriving…"
-            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900 resize-none"
-          />
-          <div className="text-right text-[9px] text-slate-400">
-            {shippingDetails.trim().split(/\s+/).filter(Boolean).length}/100
+      ) : (
+        /* ── Expanded form ── */
+        <div className="p-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            {/* Full Name */}
+            <div className="col-span-2">
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><User className="w-3 h-3" />Full Name<span className="text-rose-500">*</span></label>
+              <input type="text" value={shippingFullName} onChange={(e) => setShippingFullName(e.target.value)} placeholder="Abebe Kebede" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* Phone */}
+            <div className="col-span-2">
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Phone className="w-3 h-3" />Phone<span className="text-rose-500">*</span></label>
+              <input type="tel" value={shippingPhone} onChange={(e) => setShippingPhone(e.target.value)} placeholder="0911 234 567" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* Region */}
+            <div>
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Building2 className="w-3 h-3" />Region<span className="text-rose-500">*</span></label>
+              <input type="text" value={shippingRegion} onChange={(e) => setShippingRegion(e.target.value)} placeholder="Addis Ababa" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* City */}
+            <div>
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Home className="w-3 h-3" />City<span className="text-rose-500">*</span></label>
+              <input type="text" value={shippingCity} onChange={(e) => setShippingCity(e.target.value)} placeholder="Kirkos" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* Woreda */}
+            <div>
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Woreda</label>
+              <input type="text" value={shippingWoreda} onChange={(e) => setShippingWoreda(e.target.value)} placeholder="Woreda 08" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* Kebele */}
+            <div>
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1">Kebele</label>
+              <input type="text" value={shippingKebele} onChange={(e) => setShippingKebele(e.target.value)} placeholder="Kebele 15" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
+            {/* Street */}
+            <div className="col-span-2">
+              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><Navigation className="w-3 h-3" />Street / Landmark</label>
+              <input type="text" value={shippingStreet} onChange={(e) => setShippingStreet(e.target.value)} placeholder="Near Edna Mall" className="w-full h-9 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900" />
+            </div>
           </div>
+          {/* Instructions */}
+          <div className="mt-2">
+            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 mb-1"><MessageSquare className="w-3 h-3" />Delivery Instructions</label>
+            <textarea
+              value={shippingDetails}
+              onChange={(e) => { const words = e.target.value.trim().split(/\s+/).filter(Boolean); if (words.length <= 100) setShippingDetails(e.target.value); }}
+              rows={2}
+              placeholder="Call when arriving…"
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-slate-900 resize-none"
+            />
+            <div className="text-right text-[9px] text-slate-400">
+              {shippingDetails.trim().split(/\s+/).filter(Boolean).length}/100
+            </div>
+          </div>
+          {deliveryCollapsed === false && (shippingFullName && shippingPhone && shippingRegion && shippingCity) && (
+            <button
+              onClick={() => setDeliveryCollapsed(true)}
+              className="mt-2 text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+            >
+              ↑ Collapse
+            </button>
+          )}
         </div>
-      </div>
+      )}
     </section>
 
     {/* ── Payment ── */}
