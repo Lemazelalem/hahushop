@@ -863,6 +863,14 @@ export default function CheckoutPage() {
         })
         .catch((e) => console.warn("Confirmation email failed:", e));
 
+      // Notify each seller who has items in this order
+      void fetch("/api/orders/notify-seller", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+        keepalive: true,
+      }).catch((e) => console.warn("Seller notification failed:", e));
+
       console.log("✨ Order success overlay should be visible now");
       setTimeout(() => {
         console.log("🔄 Redirecting to /my-orders");

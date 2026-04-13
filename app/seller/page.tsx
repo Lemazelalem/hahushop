@@ -92,6 +92,28 @@ type SoldItem = {
   order_payment_status: string;
 };
 
+type SellerOrder = {
+  order_id: string;
+  order_created_at: string;
+  order_status: string;
+  order_payment_status: string;
+  shipping_full_name: string;
+  shipping_phone: string;
+  shipping_city: string;
+  shipping_region: string;
+  items: {
+    id: string;
+    name_snapshot: string;
+    emoji_snapshot: string | null;
+    image_url_snapshot: string | null;
+    quantity: number;
+    line_total_cents: number | null;
+    color_name: string | null;
+    size_label: string | null;
+  }[];
+  seller_total_cents: number;
+};
+
 type SalesByDay = {
   dateKey: string;
   label: string;
@@ -155,6 +177,8 @@ export default function SellerDashboardPage() {
   });
 
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [sellerOrders, setSellerOrders] = useState<SellerOrder[]>([]);
+  const [showOrders, setShowOrders] = useState(false);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [salesByDay, setSalesByDay] = useState<SalesByDay[]>([]);
   const [soldTodayTotal, setSoldTodayTotal] = useState(0);
@@ -299,6 +323,58 @@ export default function SellerDashboardPage() {
           lastPayoutAt,
         });
 
+        // Load seller orders (grouped by order)
+        const { data: orderItemsData } = await supabase
+          .from("order_items")
+          .select(`
+            id, name_snapshot, emoji_snapshot, image_url_snapshot,
+            quantity, line_total_cents, color_name, size_label, order_id,
+            orders(id, created_at, status, payment_status,
+                   shipping_full_name, shipping_phone, shipping_city, shipping_region)
+          `)
+          .eq("seller_id", user.id)
+          .order("order_id", { ascending: false })
+          .limit(100);
+
+        if (orderItemsData) {
+          const orderMap = new Map<string, SellerOrder>();
+          for (const item of orderItemsData as any[]) {
+            const o = item.orders;
+            if (!o || o.status === "cancelled") continue;
+            if (!orderMap.has(item.order_id)) {
+              orderMap.set(item.order_id, {
+                order_id: item.order_id,
+                order_created_at: o.created_at,
+                order_status: o.status,
+                order_payment_status: o.payment_status,
+                shipping_full_name: o.shipping_full_name ?? "",
+                shipping_phone: o.shipping_phone ?? "",
+                shipping_city: o.shipping_city ?? "",
+                shipping_region: o.shipping_region ?? "",
+                items: [],
+                seller_total_cents: 0,
+              });
+            }
+            const entry = orderMap.get(item.order_id)!;
+            entry.items.push({
+              id: item.id,
+              name_snapshot: item.name_snapshot,
+              emoji_snapshot: item.emoji_snapshot,
+              image_url_snapshot: item.image_url_snapshot,
+              quantity: item.quantity,
+              line_total_cents: item.line_total_cents,
+              color_name: item.color_name,
+              size_label: item.size_label,
+            });
+            entry.seller_total_cents += item.line_total_cents ?? 0;
+          }
+          setSellerOrders(
+            Array.from(orderMap.values()).sort(
+              (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
+            )
+          );
+        }
+
         // Load sold items
         const { data: salesData } = await supabase
           .from("order_items")
@@ -432,6 +508,30 @@ export default function SellerDashboardPage() {
             order_payment_status: "unpaid",
           };
           setSoldItems((prev) => [newSale, ...prev].slice(0, 20));
+          // Prepend to seller orders (new order or add item to existing)
+          setSellerOrders((prev) => {
+            const existing = prev.find((o) => o.order_id === item.order_id);
+            if (existing) {
+              return prev.map((o) =>
+                o.order_id === item.order_id
+                  ? { ...o, seller_total_cents: o.seller_total_cents + (item.line_total_cents ?? 0), items: [...o.items, { id: item.id, name_snapshot: item.name_snapshot, emoji_snapshot: item.emoji_snapshot, image_url_snapshot: item.image_url_snapshot, quantity: qty, line_total_cents: item.line_total_cents, color_name: item.color_name ?? null, size_label: item.size_label ?? null }] }
+                  : o
+              );
+            }
+            const newOrder: SellerOrder = {
+              order_id: item.order_id,
+              order_created_at: new Date().toISOString(),
+              order_status: "pending",
+              order_payment_status: "unpaid",
+              shipping_full_name: "",
+              shipping_phone: "",
+              shipping_city: "",
+              shipping_region: "",
+              items: [{ id: item.id, name_snapshot: item.name_snapshot, emoji_snapshot: item.emoji_snapshot, image_url_snapshot: item.image_url_snapshot, quantity: qty, line_total_cents: item.line_total_cents, color_name: item.color_name ?? null, size_label: item.size_label ?? null }],
+              seller_total_cents: item.line_total_cents ?? 0,
+            };
+            return [newOrder, ...prev];
+          });
           setSoldTodayTotal((prev) => prev + qty);
           setSoldByProductToday((prev) => ({
             ...prev,
@@ -1306,6 +1406,106 @@ export default function SellerDashboardPage() {
               </div>
             </div>
           )}
+        </section>
+
+        {/* ── My Orders Section ── */}
+        <section className="glass-card rounded-2xl p-4 sm:p-5">
+          <button
+            onClick={() => setShowOrders(!showOrders)}
+            className="md:hidden w-full flex items-center justify-between"
+          >
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <Store className="w-4 h-4 text-indigo-600" />
+              My Orders
+              {sellerOrders.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">
+                  {sellerOrders.length}
+                </span>
+              )}
+            </h3>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showOrders ? "rotate-180" : ""}`} />
+          </button>
+
+          <div className="hidden md:flex items-center gap-2 mb-4">
+            <Store className="w-4 h-4 text-indigo-600" />
+            <h3 className="font-bold text-slate-900">My Orders</h3>
+            {sellerOrders.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                {sellerOrders.length}
+              </span>
+            )}
+          </div>
+
+          <div className={`${showOrders ? "mt-3" : "hidden md:block"}`}>
+            {sellerOrders.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-6">
+                No orders yet — they&apos;ll appear here when customers buy your products.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {sellerOrders.map((order) => {
+                  const shortId = order.order_id.slice(0, 8).toUpperCase();
+                  const isPaid = order.order_payment_status === "paid";
+                  const isCancelled = order.order_status === "cancelled";
+                  return (
+                    <div key={order.order_id} className="rounded-xl border border-slate-200 bg-slate-50/60 overflow-hidden">
+                      {/* Order header */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-700">#{shortId}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isPaid ? "bg-emerald-100 text-emerald-700" :
+                            isCancelled ? "bg-rose-100 text-rose-700" :
+                            "bg-amber-100 text-amber-700"
+                          }`}>
+                            {isPaid ? "Paid" : isCancelled ? "Cancelled" : "Unpaid"}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-black text-slate-900">
+                            ETB {(order.seller_total_cents / 100).toFixed(0)}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {new Date(order.order_created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Items */}
+                      <div className="px-4 py-2.5 space-y-2">
+                        {order.items.map((item) => (
+                          <div key={item.id} className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
+                              {item.image_url_snapshot
+                                ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
+                                : item.emoji_snapshot ?? "📦"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 truncate">{item.name_snapshot}</p>
+                              <p className="text-[10px] text-slate-400">
+                                Qty {item.quantity}
+                                {item.color_name ? ` · ${item.color_name}` : ""}
+                                {item.size_label ? ` · ${item.size_label}` : ""}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold text-slate-700 flex-shrink-0">
+                              ETB {((item.line_total_cents ?? 0) / 100).toFixed(0)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Delivery */}
+                      {order.shipping_full_name && (
+                        <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>📍</span>
+                          <span>{order.shipping_full_name} · {order.shipping_city}, {order.shipping_region} · {order.shipping_phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
