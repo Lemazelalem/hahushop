@@ -298,6 +298,8 @@ function Step({ icon, text }: { icon: string; text: string }) {
   );
 }
 
+const SHIPPING_KEY = "hahu_shipping_v1";
+
 /* ─── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function CheckoutPage() {
@@ -376,6 +378,39 @@ export default function CheckoutPage() {
     }
     load();
   }, []);
+
+  /* ── Persist & restore shipping details via localStorage ───────────────── */
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SHIPPING_KEY);
+      if (!saved) return;
+      const d = JSON.parse(saved);
+      if (d.fullName)  setShippingFullName(d.fullName);
+      if (d.phone)     setShippingPhone(d.phone);
+      if (d.region)    setShippingRegion(d.region);
+      if (d.city)      setShippingCity(d.city);
+      if (d.woreda)    setShippingWoreda(d.woreda);
+      if (d.kebele)    setShippingKebele(d.kebele);
+      if (d.street)    setShippingStreet(d.street);
+      if (d.details)   setShippingDetails(d.details);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHIPPING_KEY, JSON.stringify({
+        fullName: shippingFullName,
+        phone:    shippingPhone,
+        region:   shippingRegion,
+        city:     shippingCity,
+        woreda:   shippingWoreda,
+        kebele:   shippingKebele,
+        street:   shippingStreet,
+        details:  shippingDetails,
+      }));
+    } catch {}
+  }, [shippingFullName, shippingPhone, shippingRegion, shippingCity, shippingWoreda, shippingKebele, shippingStreet, shippingDetails]);
 
   /* ── Cart items that come from Supabase products ────────────────────────── */
 
