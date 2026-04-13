@@ -103,16 +103,16 @@ export async function POST(req: NextRequest) {
     const { error: insertErr } = await db.from("order_items").insert(payload);
     if (insertErr) {
       console.error("[finalize] order_items insert error:", insertErr);
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+      // Don't return early — stock decrement must still run regardless.
+    } else {
+      console.log("[finalize] order_items inserted:", {
+        orderId,
+        count: payload.length,
+        seller_ids: payload.map((p) => p.seller_id),
+      });
     }
 
-    console.log("[finalize] order_items inserted:", {
-      orderId,
-      count: payload.length,
-      seller_ids: payload.map((p) => p.seller_id),
-    });
-
-    // Decrement stock (non-critical — log errors but don't fail the response)
+    // Decrement stock — runs whether or not order_items insert succeeded.
     try {
       // Group items by product_id
       const byProduct = new Map<string, SnapshotItem[]>();
@@ -175,6 +175,9 @@ export async function POST(req: NextRequest) {
       console.warn("[finalize] stock decrement exception:", stockEx);
     }
 
+    if (insertErr) {
+      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error("[finalize] unexpected error:", err);
