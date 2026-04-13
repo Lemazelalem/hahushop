@@ -1,6 +1,7 @@
 // app/api/seller/orders/route.ts
-// Returns order_items (and parent order details) for the authenticated seller.
-// Uses service role to bypass orders RLS (which only allows the buyer to read).
+// Returns orders that contain items belonging to the authenticated seller.
+// Reads from orders.cart_snapshot (same as admin) — never touches order_items,
+// so it works regardless of order_items RLS or insert failures.
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -38,11 +39,10 @@ async function getAuthenticatedSellerId(): Promise<string | null> {
   const db = getSupabaseAdmin();
   const { data: profile } = await db
     .from("profiles")
-    .select("role, seller_status")
+    .select("role")
     .eq("id", session.user.id)
     .maybeSingle();
 
-  // Allow sellers and admins
   if (!profile || (profile.role !== "seller" && profile.role !== "admin")) {
     return null;
   }
@@ -62,44 +62,66 @@ export async function GET() {
     step = "db-init";
     const db = getSupabaseAdmin();
 
-    // Step 1: Fetch order_items for this seller
-    step = "order_items-query";
-    const { data: rawItems, error: itemsErr } = await db
-      .from("order_items")
-      .select("id, product_id, name_snapshot, emoji_snapshot, image_url_snapshot, quantity, line_total_cents, color_name, size_label, order_id")
-      .eq("seller_id", sellerId)
-      .order("order_id", { ascending: false })
-      .limit(100);
-
-    if (itemsErr) {
-      console.error("[seller/orders] items query error:", itemsErr);
-      return NextResponse.json({ error: `order_items: ${itemsErr.message}` }, { status: 500 });
-    }
-
-    if (!rawItems || rawItems.length === 0) {
-      return NextResponse.json({ items: [] });
-    }
-
-    // Step 2: Fetch parent orders separately
+    // Fetch recent orders with cart_snapshot — same as admin approach.
+    // Service role bypasses orders RLS (which only allows the buyer to read their own orders).
     step = "orders-query";
-    const orderIds = [...new Set(rawItems.map((i) => i.order_id))];
     const { data: orders, error: ordersErr } = await db
       .from("orders")
-      .select("id, created_at, status, payment_status, shipping_full_name, shipping_phone, shipping_city, shipping_region")
-      .in("id", orderIds);
+      .select(
+        "id, created_at, status, payment_status, shipping_full_name, shipping_phone, shipping_city, shipping_region, cart_snapshot"
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     if (ordersErr) {
       console.error("[seller/orders] orders query error:", ordersErr);
-      return NextResponse.json({ error: `orders: ${ordersErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: ordersErr.message }, { status: 500 });
     }
 
-    // Step 3: Merge
-    step = "merge";
-    const orderMap = new Map((orders ?? []).map((o) => [o.id, o]));
-    const items = rawItems.map((item) => ({
-      ...item,
-      orders: orderMap.get(item.order_id) ?? null,
-    }));
+    // Walk each order's cart_snapshot.items, keep only items belonging to this seller.
+    step = "filter";
+    const items: unknown[] = [];
+
+    for (const order of orders ?? []) {
+      const snapshotItems: any[] = Array.isArray(order.cart_snapshot?.items)
+        ? order.cart_snapshot.items
+        : [];
+
+      const sellerItems = snapshotItems.filter(
+        (i: any) => i.seller_id === sellerId
+      );
+
+      if (sellerItems.length === 0) continue;
+
+      const orderInfo = {
+        id: order.id,
+        created_at: order.created_at,
+        status: order.status,
+        payment_status: order.payment_status,
+        shipping_full_name: order.shipping_full_name,
+        shipping_phone: order.shipping_phone,
+        shipping_city: order.shipping_city,
+        shipping_region: order.shipping_region,
+      };
+
+      sellerItems.forEach((si: any, idx: number) => {
+        items.push({
+          id: `${order.id}-${idx}`,
+          product_id: si.product_id ?? null,
+          name_snapshot: si.name_snapshot ?? "",
+          emoji_snapshot: si.emoji_snapshot ?? null,
+          image_url_snapshot: si.image_url_snapshot ?? null,
+          quantity: si.qty ?? 0,
+          line_total_cents: si.line_total_cents ?? 0,
+          color_name: si.color_name ?? null,
+          size_label: si.size_label ?? null,
+          order_id: order.id,
+          orders: orderInfo,
+        });
+      });
+    }
+
+    console.log("[seller/orders] sellerId:", sellerId, "matching items:", items.length);
 
     return NextResponse.json({ items });
   } catch (err: unknown) {
