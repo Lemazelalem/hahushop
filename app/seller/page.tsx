@@ -323,56 +323,52 @@ export default function SellerDashboardPage() {
           lastPayoutAt,
         });
 
-        // Load seller orders (grouped by order)
-        const { data: orderItemsData } = await supabase
-          .from("order_items")
-          .select(`
-            id, name_snapshot, emoji_snapshot, image_url_snapshot,
-            quantity, line_total_cents, color_name, size_label, order_id,
-            orders(id, created_at, status, payment_status,
-                   shipping_full_name, shipping_phone, shipping_city, shipping_region)
-          `)
-          .eq("seller_id", user.id)
-          .order("order_id", { ascending: false })
-          .limit(100);
-
-        if (orderItemsData) {
-          const orderMap = new Map<string, SellerOrder>();
-          for (const item of orderItemsData as any[]) {
-            const o = item.orders;
-            if (!o || o.status === "cancelled") continue;
-            if (!orderMap.has(item.order_id)) {
-              orderMap.set(item.order_id, {
-                order_id: item.order_id,
-                order_created_at: o.created_at,
-                order_status: o.status,
-                order_payment_status: o.payment_status,
-                shipping_full_name: o.shipping_full_name ?? "",
-                shipping_phone: o.shipping_phone ?? "",
-                shipping_city: o.shipping_city ?? "",
-                shipping_region: o.shipping_region ?? "",
-                items: [],
-                seller_total_cents: 0,
-              });
+        // Load seller orders via server-side API (bypasses orders RLS)
+        try {
+          const ordersRes = await fetch("/api/seller/orders");
+          if (ordersRes.ok) {
+            const { items: orderItemsData } = await ordersRes.json();
+            if (Array.isArray(orderItemsData)) {
+              const orderMap = new Map<string, SellerOrder>();
+              for (const item of orderItemsData as any[]) {
+                const o = item.orders;
+                if (!o || o.status === "cancelled") continue;
+                if (!orderMap.has(item.order_id)) {
+                  orderMap.set(item.order_id, {
+                    order_id: item.order_id,
+                    order_created_at: o.created_at,
+                    order_status: o.status,
+                    order_payment_status: o.payment_status,
+                    shipping_full_name: o.shipping_full_name ?? "",
+                    shipping_phone: o.shipping_phone ?? "",
+                    shipping_city: o.shipping_city ?? "",
+                    shipping_region: o.shipping_region ?? "",
+                    items: [],
+                    seller_total_cents: 0,
+                  });
+                }
+                const entry = orderMap.get(item.order_id)!;
+                entry.items.push({
+                  id: item.id,
+                  name_snapshot: item.name_snapshot,
+                  emoji_snapshot: item.emoji_snapshot,
+                  image_url_snapshot: item.image_url_snapshot,
+                  quantity: item.quantity,
+                  line_total_cents: item.line_total_cents,
+                  color_name: item.color_name,
+                  size_label: item.size_label,
+                });
+                entry.seller_total_cents += item.line_total_cents ?? 0;
+              }
+              setSellerOrders(
+                Array.from(orderMap.values()).sort(
+                  (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
+                )
+              );
             }
-            const entry = orderMap.get(item.order_id)!;
-            entry.items.push({
-              id: item.id,
-              name_snapshot: item.name_snapshot,
-              emoji_snapshot: item.emoji_snapshot,
-              image_url_snapshot: item.image_url_snapshot,
-              quantity: item.quantity,
-              line_total_cents: item.line_total_cents,
-              color_name: item.color_name,
-              size_label: item.size_label,
-            });
-            entry.seller_total_cents += item.line_total_cents ?? 0;
           }
-          setSellerOrders(
-            Array.from(orderMap.values()).sort(
-              (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
-            )
-          );
+        } catch (e) {
+          console.warn("Failed to load seller orders:", e);
         }
 
         // Load sold items
@@ -508,30 +504,40 @@ export default function SellerDashboardPage() {
             order_payment_status: "unpaid",
           };
           setSoldItems((prev) => [newSale, ...prev].slice(0, 20));
-          // Prepend to seller orders (new order or add item to existing)
-          setSellerOrders((prev) => {
-            const existing = prev.find((o) => o.order_id === item.order_id);
-            if (existing) {
-              return prev.map((o) =>
-                o.order_id === item.order_id
-                  ? { ...o, seller_total_cents: o.seller_total_cents + (item.line_total_cents ?? 0), items: [...o.items, { id: item.id, name_snapshot: item.name_snapshot, emoji_snapshot: item.emoji_snapshot, image_url_snapshot: item.image_url_snapshot, quantity: qty, line_total_cents: item.line_total_cents, color_name: item.color_name ?? null, size_label: item.size_label ?? null }] }
-                  : o
+          // Refetch seller orders from server to get full order details (shipping, status)
+          fetch("/api/seller/orders")
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => {
+              if (!data?.items) return;
+              const orderMap = new Map<string, SellerOrder>();
+              for (const oi of data.items as any[]) {
+                const o = oi.orders;
+                if (!o || o.status === "cancelled") continue;
+                if (!orderMap.has(oi.order_id)) {
+                  orderMap.set(oi.order_id, {
+                    order_id: oi.order_id,
+                    order_created_at: o.created_at,
+                    order_status: o.status,
+                    order_payment_status: o.payment_status,
+                    shipping_full_name: o.shipping_full_name ?? "",
+                    shipping_phone: o.shipping_phone ?? "",
+                    shipping_city: o.shipping_city ?? "",
+                    shipping_region: o.shipping_region ?? "",
+                    items: [],
+                    seller_total_cents: 0,
+                  });
+                }
+                const entry = orderMap.get(oi.order_id)!;
+                entry.items.push({ id: oi.id, name_snapshot: oi.name_snapshot, emoji_snapshot: oi.emoji_snapshot, image_url_snapshot: oi.image_url_snapshot, quantity: oi.quantity, line_total_cents: oi.line_total_cents, color_name: oi.color_name ?? null, size_label: oi.size_label ?? null });
+                entry.seller_total_cents += oi.line_total_cents ?? 0;
+              }
+              setSellerOrders(
+                Array.from(orderMap.values()).sort(
+                  (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
+                )
               );
-            }
-            const newOrder: SellerOrder = {
-              order_id: item.order_id,
-              order_created_at: new Date().toISOString(),
-              order_status: "pending",
-              order_payment_status: "unpaid",
-              shipping_full_name: "",
-              shipping_phone: "",
-              shipping_city: "",
-              shipping_region: "",
-              items: [{ id: item.id, name_snapshot: item.name_snapshot, emoji_snapshot: item.emoji_snapshot, image_url_snapshot: item.image_url_snapshot, quantity: qty, line_total_cents: item.line_total_cents, color_name: item.color_name ?? null, size_label: item.size_label ?? null }],
-              seller_total_cents: item.line_total_cents ?? 0,
-            };
-            return [newOrder, ...prev];
-          });
+            })
+            .catch(() => {});
           setSoldTodayTotal((prev) => prev + qty);
           setSoldByProductToday((prev) => ({
             ...prev,

@@ -36,8 +36,11 @@ export async function POST(req: NextRequest) {
       .eq("order_id", orderId);
 
     if (!items || items.length === 0) {
+      console.log("[notify-seller] no order_items found for order", orderId);
       return NextResponse.json({ sent: 0 });
     }
+
+    console.log("[notify-seller] order_items found:", items.length, "seller_ids:", items.map((i) => i.seller_id));
 
     // Group items by seller
     const bySeller = new Map<string, typeof items>();
@@ -49,6 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (bySeller.size === 0) {
+      console.log("[notify-seller] all items have null seller_id — no sellers to notify for order", orderId);
       return NextResponse.json({ sent: 0 });
     }
 
