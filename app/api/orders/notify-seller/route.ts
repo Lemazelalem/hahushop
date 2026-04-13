@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
     // Group items by seller
     const bySeller = new Map<string, typeof items>();
     for (const item of items) {
-      if (!item.seller_id) continue;
+      if (!item.seller_id) {
+        console.log("[notify-seller] skipping — null seller_id:", item.name_snapshot);
+        continue;
+      }
       const list = bySeller.get(item.seller_id) ?? [];
       list.push(item);
       bySeller.set(item.seller_id, list);

@@ -106,7 +106,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
 
-    console.log("[finalize] order_items inserted:", { orderId, count: payload.length });
+    console.log("[finalize] order_items inserted:", {
+      orderId,
+      count: payload.length,
+      seller_ids: payload.map((p) => p.seller_id),
+    });
 
     // Decrement stock (non-critical — log errors but don't fail the response)
     try {
@@ -149,6 +153,7 @@ export async function POST(req: NextRequest) {
             .update({ size_variants: variants })
             .eq("id", productId);
           if (varErr) console.warn("[finalize] size_variants decrement error:", varErr, productId);
+          else console.log("[finalize] size_variants decremented for product:", productId);
         }
 
         // Decrement stock_quantity for simple (non-variant) items
@@ -161,6 +166,7 @@ export async function POST(req: NextRequest) {
             .update({ stock_quantity: newStock })
             .eq("id", productId);
           if (stockErr) console.warn("[finalize] stock_quantity decrement error:", stockErr, productId);
+          else console.log("[finalize] stock_quantity decremented for product:", productId, "new stock:", newStock);
         }
       }
 
