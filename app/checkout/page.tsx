@@ -1469,9 +1469,9 @@ export default function CheckoutPage() {
           <div className="flex items-end justify-between">
             <div>
               <div className="text-[10px] font-semibold text-slate-500">Total</div>
-              <div className="text-[16px] leading-none font-medium text-slate-700 mt-0.5">{money(totalCents)}</div>
+              <div className="text-[18px] leading-none font-bold text-slate-900 mt-0.5">{money(totalCents)}</div>
               {paymentMethod === "stripe_card" && usdRate && (
-                <div className="text-[10px] text-slate-400 mt-1">≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD</div>
+                <div className="text-[11px] font-medium text-blue-500 mt-1">≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD</div>
               )}
             </div>
             <div className="text-right text-[9px] text-slate-500">
@@ -1498,7 +1498,7 @@ export default function CheckoutPage() {
         type="button"
         disabled={placingOrder || !hasAnyItems || !isShippingValid() || !isPaymentMethodActive}
         onClick={handlePlaceOrder}
-        className="w-full h-11 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[12px] shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        className="w-full h-11 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[15px] shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
       >
         {placingOrder ? (
           <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing</>
