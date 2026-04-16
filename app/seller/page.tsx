@@ -346,13 +346,17 @@ export default function SellerDashboardPage() {
 
     setSoldItems(mapped.slice(0, 50));
 
-    // Compute daily & per-product stats from ALL items (not sliced)
-    const todayKey = new Date().toISOString().slice(0, 10);
+    // Compute daily & per-product stats from ALL items (not sliced).
+    // Use local date (seller's timezone) so "today" matches their clock,
+    // not UTC — important for Ethiopia (UTC+3) where UTC midnight lags 3 hours.
+    const localDate = (iso: string) =>
+      new Date(iso).toLocaleDateString("en-CA"); // "YYYY-MM-DD" in local tz
+    const todayKey = new Date().toLocaleDateString("en-CA");
     const byProductToday: Record<string, number> = {};
     const byDay: Record<string, number> = {};
 
     for (const s of mapped) {
-      const day = s.order_created_at.slice(0, 10);
+      const day = localDate(s.order_created_at);
       const qty = Math.max(0, Number(s.quantity ?? 0));
       byDay[day] = (byDay[day] ?? 0) + qty;
       if (day === todayKey && s.product_id) {
@@ -364,7 +368,7 @@ export default function SellerDashboardPage() {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const key = d.toLocaleDateString("en-CA");
       dailyRows.push({
         dateKey: key,
         label: d.toLocaleDateString("en-US", { weekday: "short" }),
