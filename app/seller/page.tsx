@@ -163,6 +163,7 @@ export default function SellerDashboardPage() {
   const [showActivity, setShowActivity] = useState(false);
   const [showQuickLinks, setShowQuickLinks] = useState(false);
   const [showSales, setShowSales] = useState(false);
+  const [showStock, setShowStock] = useState(false);
   
   const [verification, setVerification] = useState<SellerVerificationInfo>({
     status: "none",
@@ -1123,7 +1124,23 @@ export default function SellerDashboardPage() {
 
         {/* Daily Sales + Stock Watch */}
         <section className="glass-card rounded-2xl p-5 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          {/* Mobile toggle */}
+          <button
+            onClick={() => setShowStock(!showStock)}
+            className="md:hidden w-full flex items-center justify-between"
+          >
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <Box className="w-4 h-4 text-emerald-600" />
+              Daily Sales &amp; Stock
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                {soldTodayTotal} sold today
+              </span>
+            </h3>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showStock ? "rotate-180" : ""}`} />
+          </button>
+
+          {/* Desktop header */}
+          <div className="hidden md:flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">Daily Sales & Stock Watch</h3>
               <p className="text-sm text-slate-600 mt-1">
@@ -1135,7 +1152,7 @@ export default function SellerDashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-5 ${showStock ? "mt-3" : "hidden md:grid"}`}>
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Last 7 Days</div>
               <div className="grid grid-cols-7 gap-2">
