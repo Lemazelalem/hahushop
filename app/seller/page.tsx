@@ -59,12 +59,6 @@ type SellerVerificationInfo = {
   reviewed_at: string | null;
 };
 
-type PayoutRowLite = {
-  status: string | null;
-  calculated_amount_cents: number | null;
-  adjusted_amount_cents: number | null;
-  paid_at?: string | null;
-};
 
 type PayoutTotals = {
   totalRecordedCents: number;
@@ -379,6 +373,33 @@ export default function SellerDashboardPage() {
     setSalesByDay(dailyRows);
     setSoldByProductToday(byProductToday);
     setSoldTodayTotal(byDay[todayKey] ?? 0);
+
+    // Compute payout totals from seller_price_cents × qty.
+    // seller_price_cents is what the seller earns — excludes admin markup.
+    // Split by order payment_status: "paid" = collected, anything else = pending.
+    let totalRecordedCents = 0;
+    let totalPaidCents = 0;
+    let lastPaidAt: string | null = null;
+
+    for (const item of rawItems) {
+      if (item.orders?.status === "cancelled") continue;
+      const sellerCents =
+        (item.seller_price_cents ?? 0) * Math.max(0, Number(item.quantity ?? 0));
+      if (sellerCents <= 0) continue;
+      totalRecordedCents += sellerCents;
+      if (item.orders?.payment_status === "paid") {
+        totalPaidCents += sellerCents;
+        const at = item.orders?.created_at ?? null;
+        if (at && (!lastPaidAt || at > lastPaidAt)) lastPaidAt = at;
+      }
+    }
+
+    setPayoutTotals({
+      totalRecordedCents,
+      totalPaidCents,
+      totalPendingCents: Math.max(totalRecordedCents - totalPaidCents, 0),
+      lastPayoutAt: lastPaidAt,
+    });
   }, []);
 
   const loadData = useCallback(async () => {
@@ -463,78 +484,32 @@ export default function SellerDashboardPage() {
         });
       }
 
-      // Load payouts
-      const { data: payoutData } = await supabase
-        .from("seller_payouts")
-        .select("*")
-        .eq("seller_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (payoutData) {
-        let totalRecorded = 0;
-        let totalPaid = 0;
-        let lastPayoutAt: string | null = null;
-
-        payoutData.forEach((row: PayoutRowLite) => {
-          const amount = row.adjusted_amount_cents ?? row.calculated_amount_cents ?? 0;
-          if (amount > 0) {
-            totalRecorded += amount;
-            if (row.status?.toLowerCase() === "paid") {
-              totalPaid += amount;
-              if (row.paid_at && (!lastPayoutAt || row.paid_at > lastPayoutAt)) {
-                lastPayoutAt = row.paid_at;
-              }
-            }
+      // Fetch orders — drives both order display and payout totals (via applyOrdersData).
+      // seller_price_cents is returned per item; applyOrdersData computes payoutTotals from it.
+      try {
+        const ordersRes = await fetch("/api/seller/orders");
+        if (ordersRes.ok) {
+          const { items: rawItems } = await ordersRes.json();
+          if (Array.isArray(rawItems)) {
+            applyOrdersData(rawItems);
           }
-        });
-
-        setPayoutTotals({
-          totalRecordedCents: totalRecorded,
-          totalPaidCents: totalPaid,
-          totalPendingCents: Math.max(totalRecorded - totalPaid, 0),
-          lastPayoutAt,
-        });
-
-        // Single fetch for both orders list and sold-item stats
-        try {
-          const ordersRes = await fetch("/api/seller/orders");
-          if (ordersRes.ok) {
-            const { items: rawItems } = await ordersRes.json();
-            if (Array.isArray(rawItems)) {
-              applyOrdersData(rawItems);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to load seller orders:", e);
         }
-
-        // Generate activities
-        const recentActivities: ActivityItem[] = [];
-        
-        // Add product activities
-        (rows || []).slice(0, 3).forEach((p: ProductRow) => {
-          recentActivities.push({
-            id: p.id,
-            type: 'product',
-            message: `Product "${p.name}" ${p.status}`,
-            time: p.created_at,
-            status: p.status,
-          });
-        });
-
-        // Add payout activities
-        payoutData.slice(0, 2).forEach((p: PayoutRowLite, idx: number) => {
-          const amount = p.adjusted_amount_cents ?? p.calculated_amount_cents ?? 0;
-          recentActivities.push({
-            id: `payout-${idx}`,
-            type: 'payout',
-            message: p.status === 'paid' ? 'Payout received' : 'Payout pending',
-            time: p.paid_at || new Date().toISOString(),
-          });
-        });
-
-        setActivities(recentActivities.slice(0, 5));
+      } catch (e) {
+        console.warn("Failed to load seller orders:", e);
       }
+
+      // Generate activities from recent products
+      const recentActivities: ActivityItem[] = [];
+      (rows || []).slice(0, 5).forEach((p: ProductRow) => {
+        recentActivities.push({
+          id: p.id,
+          type: 'product',
+          message: `Product "${p.name}" ${p.status}`,
+          time: p.created_at,
+          status: p.status,
+        });
+      });
+      setActivities(recentActivities.slice(0, 5));
 
     } catch (err: any) {
       console.error(err);

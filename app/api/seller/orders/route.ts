@@ -121,9 +121,32 @@ export async function GET() {
       });
     }
 
-    console.log("[seller/orders] sellerId:", sellerId, "matching items:", items.length);
+    // Enrich items with seller_price_cents from products table.
+    // This is the seller's take (not the customer-facing final_price_cents).
+    step = "seller-prices";
+    const productIds = [...new Set(
+      (items as any[]).map((i) => i.product_id).filter(Boolean)
+    )];
 
-    return NextResponse.json({ items });
+    const sellerPriceMap: Record<string, number> = {};
+    if (productIds.length > 0) {
+      const { data: prods } = await db
+        .from("products")
+        .select("id, seller_price_cents")
+        .in("id", productIds);
+      for (const p of prods ?? []) {
+        sellerPriceMap[p.id] = p.seller_price_cents ?? 0;
+      }
+    }
+
+    const enrichedItems = (items as any[]).map((item) => ({
+      ...item,
+      seller_price_cents: item.product_id ? (sellerPriceMap[item.product_id] ?? 0) : 0,
+    }));
+
+    console.log("[seller/orders] sellerId:", sellerId, "matching items:", enrichedItems.length);
+
+    return NextResponse.json({ items: enrichedItems });
   } catch (err: unknown) {
     console.error(`[seller/orders] error at step '${step}':`, err);
     const msg = err instanceof Error ? err.message : "Failed to load orders";
