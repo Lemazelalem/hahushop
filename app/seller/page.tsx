@@ -164,6 +164,7 @@ export default function SellerDashboardPage() {
   const [showQuickLinks, setShowQuickLinks] = useState(false);
   const [showSales, setShowSales] = useState(false);
   const [showStock, setShowStock] = useState(false);
+  const [showAllStockRows, setShowAllStockRows] = useState(false);
   
   const [verification, setVerification] = useState<SellerVerificationInfo>({
     status: "none",
@@ -285,6 +286,97 @@ export default function SellerDashboardPage() {
     setStockSaving(false);
   };
 
+  // Parses raw items from /api/seller/orders and updates all derived state.
+  // Called on initial load AND after real-time events to keep data fresh.
+  const applyOrdersData = useCallback((rawItems: any[]) => {
+    // Build sellerOrders map
+    const orderMap = new Map<string, SellerOrder>();
+    for (const item of rawItems) {
+      const o = item.orders;
+      if (!o || o.status === "cancelled") continue;
+      if (!orderMap.has(item.order_id)) {
+        orderMap.set(item.order_id, {
+          order_id: item.order_id,
+          order_created_at: o.created_at,
+          order_status: o.status,
+          order_payment_status: o.payment_status,
+          shipping_full_name: o.shipping_full_name ?? "",
+          shipping_phone: o.shipping_phone ?? "",
+          shipping_city: o.shipping_city ?? "",
+          shipping_region: o.shipping_region ?? "",
+          items: [],
+          seller_total_cents: 0,
+        });
+      }
+      const entry = orderMap.get(item.order_id)!;
+      entry.items.push({
+        id: item.id,
+        name_snapshot: item.name_snapshot,
+        emoji_snapshot: item.emoji_snapshot,
+        image_url_snapshot: item.image_url_snapshot,
+        quantity: item.quantity,
+        line_total_cents: item.line_total_cents,
+        color_name: item.color_name,
+        size_label: item.size_label,
+      });
+      entry.seller_total_cents += item.line_total_cents ?? 0;
+    }
+    setSellerOrders(
+      Array.from(orderMap.values()).sort(
+        (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
+      )
+    );
+
+    // Build sold items (no slice — show all)
+    const mapped: SoldItem[] = rawItems
+      .filter((item) => item.orders?.status !== "cancelled")
+      .map((item) => ({
+        id: item.id,
+        product_id: item.product_id ?? "",
+        name_snapshot: item.name_snapshot,
+        image_url_snapshot: item.image_url_snapshot,
+        emoji_snapshot: item.emoji_snapshot,
+        quantity: item.quantity,
+        line_total_cents: item.line_total_cents,
+        order_id: item.order_id,
+        order_created_at: item.orders?.created_at ?? new Date().toISOString(),
+        order_status: item.orders?.status ?? "unknown",
+        order_payment_status: item.orders?.payment_status ?? "unknown",
+      }));
+
+    setSoldItems(mapped.slice(0, 50));
+
+    // Compute daily & per-product stats from ALL items (not sliced)
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const byProductToday: Record<string, number> = {};
+    const byDay: Record<string, number> = {};
+
+    for (const s of mapped) {
+      const day = s.order_created_at.slice(0, 10);
+      const qty = Math.max(0, Number(s.quantity ?? 0));
+      byDay[day] = (byDay[day] ?? 0) + qty;
+      if (day === todayKey && s.product_id) {
+        byProductToday[s.product_id] = (byProductToday[s.product_id] ?? 0) + qty;
+      }
+    }
+
+    const dailyRows: SalesByDay[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dailyRows.push({
+        dateKey: key,
+        label: d.toLocaleDateString("en-US", { weekday: "short" }),
+        units: byDay[key] ?? 0,
+      });
+    }
+
+    setSalesByDay(dailyRows);
+    setSoldByProductToday(byProductToday);
+    setSoldTodayTotal(byDay[todayKey] ?? 0);
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setPageError(null);
@@ -399,112 +491,17 @@ export default function SellerDashboardPage() {
           lastPayoutAt,
         });
 
-        // Load seller orders via server-side API (bypasses orders RLS)
+        // Single fetch for both orders list and sold-item stats
         try {
           const ordersRes = await fetch("/api/seller/orders");
           if (ordersRes.ok) {
-            const { items: orderItemsData } = await ordersRes.json();
-            if (Array.isArray(orderItemsData)) {
-              const orderMap = new Map<string, SellerOrder>();
-              for (const item of orderItemsData as any[]) {
-                const o = item.orders;
-                if (!o || o.status === "cancelled") continue;
-                if (!orderMap.has(item.order_id)) {
-                  orderMap.set(item.order_id, {
-                    order_id: item.order_id,
-                    order_created_at: o.created_at,
-                    order_status: o.status,
-                    order_payment_status: o.payment_status,
-                    shipping_full_name: o.shipping_full_name ?? "",
-                    shipping_phone: o.shipping_phone ?? "",
-                    shipping_city: o.shipping_city ?? "",
-                    shipping_region: o.shipping_region ?? "",
-                    items: [],
-                    seller_total_cents: 0,
-                  });
-                }
-                const entry = orderMap.get(item.order_id)!;
-                entry.items.push({
-                  id: item.id,
-                  name_snapshot: item.name_snapshot,
-                  emoji_snapshot: item.emoji_snapshot,
-                  image_url_snapshot: item.image_url_snapshot,
-                  quantity: item.quantity,
-                  line_total_cents: item.line_total_cents,
-                  color_name: item.color_name,
-                  size_label: item.size_label,
-                });
-                entry.seller_total_cents += item.line_total_cents ?? 0;
-              }
-              setSellerOrders(
-                Array.from(orderMap.values()).sort(
-                  (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
-                )
-              );
+            const { items: rawItems } = await ordersRes.json();
+            if (Array.isArray(rawItems)) {
+              applyOrdersData(rawItems);
             }
           }
         } catch (e) {
           console.warn("Failed to load seller orders:", e);
-        }
-
-        // Load sold items + daily stats from the same API response
-        // (avoids a separate client-side query with a PostgREST join that requires a DB foreign key)
-        try {
-          const salesRes = await fetch("/api/seller/orders");
-          if (salesRes.ok) {
-            const { items: salesRaw } = await salesRes.json();
-            if (Array.isArray(salesRaw)) {
-              const mapped: SoldItem[] = (salesRaw as any[])
-                .filter((item) => item.orders?.status !== "cancelled")
-                .map((item) => ({
-                  id: item.id,
-                  product_id: item.product_id ?? "",
-                  name_snapshot: item.name_snapshot,
-                  image_url_snapshot: item.image_url_snapshot,
-                  emoji_snapshot: item.emoji_snapshot,
-                  quantity: item.quantity,
-                  line_total_cents: item.line_total_cents,
-                  order_id: item.order_id,
-                  order_created_at: item.orders?.created_at ?? new Date().toISOString(),
-                  order_status: item.orders?.status ?? "unknown",
-                  order_payment_status: item.orders?.payment_status ?? "unknown",
-                }))
-                .slice(0, 20);
-
-              setSoldItems(mapped);
-
-              const todayKey = new Date().toISOString().slice(0, 10);
-              const byProductToday: Record<string, number> = {};
-              const byDay: Record<string, number> = {};
-
-              for (const s of mapped) {
-                const day = s.order_created_at.slice(0, 10);
-                const qty = Math.max(0, Number(s.quantity ?? 0));
-                byDay[day] = (byDay[day] ?? 0) + qty;
-                if (day === todayKey && s.product_id) {
-                  byProductToday[s.product_id] = (byProductToday[s.product_id] ?? 0) + qty;
-                }
-              }
-
-              const dailyRows: SalesByDay[] = [];
-              for (let i = 6; i >= 0; i--) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                const key = d.toISOString().slice(0, 10);
-                dailyRows.push({
-                  dateKey: key,
-                  label: d.toLocaleDateString("en-US", { weekday: "short" }),
-                  units: byDay[key] ?? 0,
-                });
-              }
-
-              setSalesByDay(dailyRows);
-              setSoldByProductToday(byProductToday);
-              setSoldTodayTotal(byDay[todayKey] ?? 0);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to load sold items:", e);
         }
 
         // Generate activities
@@ -563,73 +560,30 @@ export default function SellerDashboardPage() {
         (payload) => {
           const item = payload.new as any;
           const qty = Math.max(0, Number(item.quantity ?? 0));
-          const newSale: SoldItem = {
-            id: item.id,
-            product_id: item.product_id,
-            name_snapshot: item.name_snapshot,
-            image_url_snapshot: item.image_url_snapshot,
-            emoji_snapshot: item.emoji_snapshot,
-            quantity: qty,
-            line_total_cents: item.line_total_cents,
-            order_id: item.order_id,
-            order_created_at: new Date().toISOString(),
-            order_status: "pending",
-            order_payment_status: "unpaid",
-          };
-          setSoldItems((prev) => [newSale, ...prev].slice(0, 20));
-          // Refetch seller orders from server to get full order details (shipping, status)
-          fetch("/api/seller/orders")
-            .then((r) => r.ok ? r.json() : null)
-            .then((data) => {
-              if (!data?.items) return;
-              const orderMap = new Map<string, SellerOrder>();
-              for (const oi of data.items as any[]) {
-                const o = oi.orders;
-                if (!o || o.status === "cancelled") continue;
-                if (!orderMap.has(oi.order_id)) {
-                  orderMap.set(oi.order_id, {
-                    order_id: oi.order_id,
-                    order_created_at: o.created_at,
-                    order_status: o.status,
-                    order_payment_status: o.payment_status,
-                    shipping_full_name: o.shipping_full_name ?? "",
-                    shipping_phone: o.shipping_phone ?? "",
-                    shipping_city: o.shipping_city ?? "",
-                    shipping_region: o.shipping_region ?? "",
-                    items: [],
-                    seller_total_cents: 0,
-                  });
-                }
-                const entry = orderMap.get(oi.order_id)!;
-                entry.items.push({ id: oi.id, name_snapshot: oi.name_snapshot, emoji_snapshot: oi.emoji_snapshot, image_url_snapshot: oi.image_url_snapshot, quantity: oi.quantity, line_total_cents: oi.line_total_cents, color_name: oi.color_name ?? null, size_label: oi.size_label ?? null });
-                entry.seller_total_cents += oi.line_total_cents ?? 0;
-              }
-              setSellerOrders(
-                Array.from(orderMap.values()).sort(
-                  (a, b) => new Date(b.order_created_at).getTime() - new Date(a.order_created_at).getTime()
-                )
-              );
-            })
-            .catch(() => {});
-          setSoldTodayTotal((prev) => prev + qty);
-          setSoldByProductToday((prev) => ({
+
+          // Immediate optimistic updates (instant UI feedback)
+          setLiveStockDeltaByProduct((prev) => ({
             ...prev,
             [item.product_id]: (prev[item.product_id] ?? 0) + qty,
           }));
-          setLiveStockDeltaByProduct((prev) => ({
+          setSoldTodayTotal((prev) => prev + qty);
+          setSoldByProductToday((prev) => ({
             ...prev,
             [item.product_id]: (prev[item.product_id] ?? 0) + qty,
           }));
           setSalesByDay((prev) => {
             if (prev.length === 0) return prev;
             const copy = [...prev];
-            copy[copy.length - 1] = {
-              ...copy[copy.length - 1],
-              units: copy[copy.length - 1].units + qty,
-            };
+            copy[copy.length - 1] = { ...copy[copy.length - 1], units: copy[copy.length - 1].units + qty };
             return copy;
           });
           setNewSaleCount((prev) => prev + 1);
+
+          // Server refetch to sync all order + sold data authoritatively
+          fetch("/api/seller/orders")
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => { if (data?.items) applyOrdersData(data.items); })
+            .catch(() => {});
         }
       )
       .subscribe();
@@ -1166,12 +1120,29 @@ export default function SellerDashboardPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Stock — All Products</div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Stock — Products
+                  {stockRows.length > 3 && (
+                    <span className="ml-1.5 text-slate-400 font-normal normal-case">
+                      ({showAllStockRows ? stockRows.length : Math.min(3, stockRows.length)} of {stockRows.length})
+                    </span>
+                  )}
+                </div>
+                {stockRows.length > 3 && (
+                  <button
+                    onClick={() => setShowAllStockRows((v) => !v)}
+                    className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 transition-colors"
+                  >
+                    {showAllStockRows ? "Show less" : `Show all ${stockRows.length}`}
+                  </button>
+                )}
+              </div>
               {stockRows.length === 0 ? (
                 <p className="text-sm text-slate-500">No stock data yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {stockRows.map((row) => {
+                  {(showAllStockRows ? stockRows : stockRows.slice(0, 3)).map((row) => {
                     const isEditing = editingStockId === row.productId;
                     const product = products.find((p) => p.id === row.productId);
                     const isVariant = Array.isArray(product?.size_variants) && (product?.size_variants?.length ?? 0) > 0;
