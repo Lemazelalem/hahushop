@@ -648,12 +648,18 @@ export default function SellerDashboardPage() {
     return base;
   }, [products]);
 
+  const STATUS_ORDER: Record<ProductStatus, number> = {
+    draft: 0, submitted: 1, rejected: 2, approved: 3, archived: 4,
+  };
+
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
+    return products
+      .filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
   }, [products, searchQuery, statusFilter]);
 
   const getProductStock = (product: ProductRow): number | null => {
@@ -1124,10 +1130,9 @@ export default function SellerDashboardPage() {
 
         {/* Daily Sales + Stock Watch */}
         <section className="glass-card rounded-2xl p-5 md:p-6">
-          {/* Mobile toggle */}
           <button
             onClick={() => setShowStock(!showStock)}
-            className="md:hidden w-full flex items-center justify-between"
+            className="w-full flex items-center justify-between"
           >
             <h3 className="font-bold text-slate-900 flex items-center gap-2">
               <Box className="w-4 h-4 text-emerald-600" />
@@ -1139,20 +1144,7 @@ export default function SellerDashboardPage() {
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showStock ? "rotate-180" : ""}`} />
           </button>
 
-          {/* Desktop header */}
-          <div className="hidden md:flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Daily Sales & Stock Watch</h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Track how many units you sold each day and see stock dropping in real time.
-              </p>
-            </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-              Today sold: {soldTodayTotal} units
-            </div>
-          </div>
-
-          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-5 ${showStock ? "mt-3" : "hidden md:grid"}`}>
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-5 ${showStock ? "mt-3" : "hidden"}`}>
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Last 7 Days</div>
               <div className="grid grid-cols-7 gap-2">
@@ -1573,7 +1565,7 @@ export default function SellerDashboardPage() {
         <section className="glass-card rounded-2xl p-4 sm:p-5">
           <button
             onClick={() => setShowOrders(!showOrders)}
-            className="md:hidden w-full flex items-center justify-between"
+            className="w-full flex items-center justify-between"
           >
             <h3 className="font-bold text-slate-900 flex items-center gap-2">
               <Store className="w-4 h-4 text-indigo-600" />
@@ -1587,17 +1579,7 @@ export default function SellerDashboardPage() {
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showOrders ? "rotate-180" : ""}`} />
           </button>
 
-          <div className="hidden md:flex items-center gap-2 mb-4">
-            <Store className="w-4 h-4 text-indigo-600" />
-            <h3 className="font-bold text-slate-900">My Orders</h3>
-            {sellerOrders.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-                {sellerOrders.length}
-              </span>
-            )}
-          </div>
-
-          <div className={`${showOrders ? "mt-3" : "hidden md:block"}`}>
+          <div className={`${showOrders ? "mt-3" : "hidden"}`}>
             {sellerOrders.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-6">
                 No orders yet — they&apos;ll appear here when customers buy your products.
@@ -1834,11 +1816,11 @@ export default function SellerDashboardPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
-            {/* Recent Activity — collapsible on mobile */}
+            {/* Recent Activity */}
             <div className="glass-card rounded-2xl p-4 sm:p-5">
               <button
                 onClick={() => setShowActivity(!showActivity)}
-                className="md:hidden w-full flex items-center justify-between"
+                className="w-full flex items-center justify-between"
               >
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-blue-600" />
@@ -1849,11 +1831,7 @@ export default function SellerDashboardPage() {
                 </h3>
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showActivity ? 'rotate-180' : ''}`} />
               </button>
-              <h3 className="hidden md:flex font-bold text-slate-900 items-center gap-2 mb-4">
-                <Clock className="w-4 h-4 text-blue-600" />
-                Recent Activity
-              </h3>
-              <div className={`space-y-3 ${showActivity ? 'mt-3' : 'hidden md:block'}`}>
+              <div className={`space-y-3 ${showActivity ? 'mt-3' : 'hidden'}`}>
                 {activities.length === 0 ? (
                   <p className="text-sm text-slate-500 text-center py-4">No recent activity</p>
                 ) : (
@@ -1878,11 +1856,11 @@ export default function SellerDashboardPage() {
               </div>
             </div>
 
-            {/* Quick Links — collapsible on mobile */}
+            {/* Quick Links */}
             <div className="glass-card rounded-2xl p-4 sm:p-5">
               <button
                 onClick={() => setShowQuickLinks(!showQuickLinks)}
-                className="md:hidden w-full flex items-center justify-between"
+                className="w-full flex items-center justify-between"
               >
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
                   <Settings className="w-4 h-4 text-slate-400" />
@@ -1890,8 +1868,7 @@ export default function SellerDashboardPage() {
                 </h3>
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showQuickLinks ? 'rotate-180' : ''}`} />
               </button>
-              <h3 className="hidden md:block font-bold text-slate-900 mb-4">Quick Links</h3>
-              <div className={`space-y-2 ${showQuickLinks ? 'mt-3' : 'hidden md:block'}`}>
+              <div className={`space-y-2 ${showQuickLinks ? 'mt-3' : 'hidden'}`}>
                 <button
                   onClick={() => router.push("/seller/verification")}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 text-left transition-colors group"
@@ -1925,11 +1902,11 @@ export default function SellerDashboardPage() {
               </div>
             </div>
 
-            {/* Recent Sales — collapsible on mobile */}
+            {/* Recent Sales */}
             <div className="glass-card rounded-2xl p-4 sm:p-5">
               <button
                 onClick={() => setShowSales(!showSales)}
-                className="md:hidden w-full flex items-center justify-between"
+                className="w-full flex items-center justify-between"
               >
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -1942,17 +1919,8 @@ export default function SellerDashboardPage() {
                 </h3>
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showSales ? 'rotate-180' : ''}`} />
               </button>
-              <h3 className="hidden md:flex font-bold text-slate-900 items-center gap-2 mb-4">
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
-                Recent Sales
-                {newSaleCount > 0 && (
-                  <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-xs font-bold">
-                    {newSaleCount} new
-                  </span>
-                )}
-              </h3>
 
-              <div className={`${showSales ? 'mt-3' : 'hidden md:block'}`}>
+              <div className={`${showSales ? 'mt-3' : 'hidden'}`}>
               {soldItems.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-4">
                   No sales yet — they'll appear here in real time.
