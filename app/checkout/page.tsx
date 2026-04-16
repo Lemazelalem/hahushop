@@ -1493,14 +1493,9 @@ export default function CheckoutPage() {
     <div className="px-3 py-2.5 flex items-center gap-3">
       <div className="min-w-0 flex-1">
         <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
-        <div className="text-[20px] leading-none font-black text-slate-900">{money(totalCents)}</div>
+        <div className="text-[14px] font-medium text-slate-600">{money(totalCents)}</div>
         {paymentMethod === "stripe_card" && usdRate ? (
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="usd-pill inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide" style={{ background: "#fff0f4", color: "#e0356a", border: "1px solid #fbb6ce" }}>
-              ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
-            </span>
-            <span className="text-[9px] text-slate-400">· free shipping</span>
-          </div>
+          <div className="text-[10px] text-slate-400 mt-0.5">≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD · free shipping</div>
         ) : (
           <div className="text-[9px] text-slate-500">{displayedItemCount} item{displayedItemCount !== 1 ? "s" : ""} · free shipping</div>
         )}
