@@ -35,6 +35,8 @@ import {
   PartyPopper,
 } from "lucide-react";
 import type { CartItemKind } from "@/lib/cart";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -202,11 +204,13 @@ function OrderSuccessOverlay({
   isBusinessOrder,
   totalCents,
   itemCount,
+  paymentMethod,
 }: {
   message: string;
   isBusinessOrder: boolean;
   totalCents: number;
   itemCount: number;
+  paymentMethod: PaymentMethod;
 }) {
   return (
     <div className="w-full flex flex-col items-center justify-center min-h-screen">
@@ -270,6 +274,12 @@ function OrderSuccessOverlay({
                 <Step icon="📦" text="Order prepared & dispatched within 24 h" />
                 <Step icon="🏢" text="Delivered to your registered office" />
               </>
+            ) : paymentMethod === "stripe_card" ? (
+              <>
+                <Step icon="💳" text="Your card has been charged" />
+                <Step icon="📦" text="Order is being prepared right away" />
+                <Step icon="🛵" text="Courier dispatched within 24 hours" />
+              </>
             ) : (
               <>
                 <Step icon="📦" text="We'll prepare your order right away" />
@@ -300,6 +310,79 @@ function Step({ icon, text }: { icon: string; text: string }) {
 
 const SHIPPING_KEY = "hahu_shipping_v1";
 
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "");
+
+/* ─── Stripe card form ───────────────────────────────────────────────────────── */
+
+function StripeCardForm({
+  totalCents,
+  onSuccess,
+}: {
+  totalCents: number;
+  onSuccess: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [confirming, setConfirming] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+
+  async function handlePay() {
+    if (!stripe || !elements) return;
+    setConfirming(true);
+    setCardError(null);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: `${window.location.origin}/my-orders` },
+      redirect: "if_required",
+    });
+    if (error) {
+      setCardError(error.message ?? "Payment failed. Please try again.");
+      setConfirming(false);
+    } else {
+      onSuccess();
+    }
+  }
+
+  return (
+    <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#3b82f6,#6366f1)" }} />
+      <div className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <CreditCard className="w-5 h-5 text-slate-700" />
+          <h2 className="text-lg font-black text-slate-900">Card Payment</h2>
+        </div>
+        <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+          <span className="text-sm text-slate-500">Total</span>
+          <span className="text-xl font-black text-slate-900">{money(totalCents)}</span>
+        </div>
+        <PaymentElement className="mb-4" />
+        {cardError && (
+          <div className="mb-3 rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="text-sm text-rose-700">{cardError}</span>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handlePay}
+          disabled={confirming || !stripe || !elements}
+          className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-black text-sm flex items-center justify-center gap-2 transition-all"
+        >
+          {confirming ? (
+            <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing…</>
+          ) : (
+            <><Lock className="w-4 h-4" /> Pay {money(totalCents)}</>
+          )}
+        </button>
+        <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          Secured by Stripe
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function CheckoutPage() {
@@ -325,6 +408,7 @@ export default function CheckoutPage() {
   const [paymentExpanded, setPaymentExpanded] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [usdRate, setUsdRate] = useState<number | null>(null);
+  const [stripeStep, setStripeStep] = useState<{ clientSecret: string; orderId: string } | null>(null);
 
   // Fetch live ETB→USD rate when Stripe is selected
   useEffect(() => {
@@ -345,7 +429,7 @@ export default function CheckoutPage() {
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   // ── NEW: controls the full-screen success overlay ──
   const [orderPlaced, setOrderPlaced] = useState(false);
-  const [orderSummary, setOrderSummary] = useState<{ total: number; itemCount: number } | null>(null);
+  const [orderSummary, setOrderSummary] = useState<{ total: number; itemCount: number; paymentMethod: PaymentMethod } | null>(null);
 
   const [businessProfile, setBusinessProfile] = useState<{
     is_business_account: boolean;
@@ -832,7 +916,7 @@ export default function CheckoutPage() {
         console.warn("order_payments insert:", e);
       }
 
-      // ── Stripe card flow: create PaymentIntent then redirect ──
+      // ── Stripe card flow: create PaymentIntent then show card form ──
       if (paymentMethod === "stripe_card") {
         try {
           const piRes = await fetch("/api/checkout/create-payment-intent", {
@@ -845,9 +929,9 @@ export default function CheckoutPage() {
             setOrderError(piData.error || "Could not start card payment.");
             return;
           }
-          // Store for future Stripe Elements confirmation step
-          // For now, show success — actual card form will be added in a later step
-          console.log("✅ Stripe PaymentIntent created:", piData.paymentIntentId);
+          // Hand off to Stripe card form — success flow runs after card confirmation
+          setStripeStep({ clientSecret: piData.clientSecret, orderId });
+          return;
         } catch (piErr: any) {
           console.error("Stripe PI error:", piErr);
           setOrderError("Could not connect to payment service. Please try again.");
@@ -862,14 +946,13 @@ export default function CheckoutPage() {
                 ? "Net-60"
                 : "Net-30"
             } credit. Invoice will be sent to your organization.`
-          : paymentMethod === "stripe_card"
-          ? "Order placed! Card payment is being processed."
           : "Order placed! Please prepare payment when the courier arrives.";
 
       // Save order summary BEFORE clearing so we have the data for the overlay
       setOrderSummary({
         total: totalCents,
         itemCount: displayedItemCount || snapshotItems.reduce((s, i) => s + i.qty, 0),
+        paymentMethod,
       });
 
       // Set orderPlaced FIRST to prevent empty cart render
@@ -915,6 +998,43 @@ export default function CheckoutPage() {
     } finally {
       setPlacingOrder(false);
     }
+  }
+
+  /* ── Stripe card confirmation callback ─────────────────────────────────── */
+
+  function handleStripeSuccess() {
+    const orderId = stripeStep?.orderId;
+    if (!orderId) return;
+    setOrderSummary({
+      total: totalCents,
+      itemCount: displayedItemCount || snapshotItems.reduce((s, i) => s + i.qty, 0),
+      paymentMethod: "stripe_card",
+    });
+    setOrderPlaced(true);
+    clearCart();
+    setOrderSuccess("Payment confirmed! Your order is being prepared.");
+    setStripeStep(null);
+
+    void fetch("/api/orders/send-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId }),
+      keepalive: true,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Unknown" }));
+        console.warn("Confirmation email failed:", data.error || res.status);
+      }
+    }).catch((e) => console.warn("Confirmation email failed:", e));
+
+    void fetch("/api/orders/notify-seller", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId }),
+      keepalive: true,
+    }).catch((e) => console.warn("Seller notification failed:", e));
+
+    setTimeout(() => router.push("/my-orders"), 3000);
   }
 
   /* ── Empty state ────────────────────────────────────────────────────────── */
@@ -971,7 +1091,22 @@ export default function CheckoutPage() {
           isBusinessOrder={isBusinessOrder}
           totalCents={orderSummary.total}
           itemCount={orderSummary.itemCount}
+          paymentMethod={orderSummary.paymentMethod}
         />
+      </main>
+    );
+  }
+
+  // ── Stripe card form ──
+  if (stripeStep) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <Elements
+          stripe={stripePromise}
+          options={{ clientSecret: stripeStep.clientSecret, appearance: { theme: "stripe" } }}
+        >
+          <StripeCardForm totalCents={totalCents} onSuccess={handleStripeSuccess} />
+        </Elements>
       </main>
     );
   }
@@ -1335,14 +1470,9 @@ export default function CheckoutPage() {
             <div>
               <div className="text-[10px] font-semibold text-slate-500">Total</div>
               <div className="text-[20px] leading-none font-black text-slate-900 mt-0.5">{money(totalCents)}</div>
-              {paymentMethod === "stripe_card" && usdRate && (
-                <div className="usd-pill inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-black tracking-wide" style={{ background: "#fff0f4", color: "#e0356a", border: "1px solid #fbb6ce" }}>
-                  ≈ ${(totalCents / 100 * usdRate).toFixed(2)} <span className="opacity-70">USD</span>
-                </div>
-              )}
             </div>
             <div className="text-right text-[9px] text-slate-500">
-              {isBusinessOrder ? "Invoice later" : "Pay on delivery"}
+              {isBusinessOrder ? "Invoice later" : paymentMethod === "stripe_card" ? "Card payment" : "Pay on delivery"}
             </div>
           </div>
         </div>
@@ -1961,8 +2091,7 @@ export default function CheckoutPage() {
                       <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-xs">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
                         <span className="text-amber-700">
-                          Please select &quot;Pay on Delivery&quot; to complete your
-                          order.
+                          Please select an active payment method to continue.
                         </span>
                       </div>
                     )}
@@ -1985,7 +2114,7 @@ export default function CheckoutPage() {
                         </>
                       ) : !isPaymentMethodActive ? (
                         <>
-                          Select Pay on Delivery <Lock className="w-4 h-4" />
+                          Select payment method <Lock className="w-4 h-4" />
                         </>
                       ) : isBusinessOrder ? (
                         <>
@@ -2032,7 +2161,10 @@ export default function CheckoutPage() {
                 <div className="text-center">
                   <p className="text-[11px] text-slate-500">
                     Need help?{" "}
-                    <button className="text-blue-600 hover:text-blue-700 font-medium">
+                    <button
+                      onClick={() => router.push("/contact")}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
                       Contact support
                     </button>
                   </p>
