@@ -11,9 +11,10 @@ module.exports = {
         softblue: "rgb(120 190 255)",
       },
       keyframes: {
-        "btn-glow": {
-          "0%, 100%": { boxShadow: "0 4px 14px rgba(255,0,80,0.4)" },
-          "50%":       { boxShadow: "0 4px 28px rgba(255,0,80,0.75), 0 0 0 4px rgba(255,0,80,0.12)" },
+        "btn-pulse": {
+          "0%":   { boxShadow: "0 0 0 0 rgba(255,0,80,0.65)" },
+          "70%":  { boxShadow: "0 0 0 14px rgba(255,0,80,0)" },
+          "100%": { boxShadow: "0 0 0 0 rgba(255,0,80,0)" },
         },
         "usd-glow": {
           "0%, 100%": { boxShadow: "0 0 0px rgba(238,130,238,0)" },
@@ -21,7 +22,7 @@ module.exports = {
         },
       },
       animation: {
-        "btn-glow":  "btn-glow 2s ease-in-out infinite",
+        "btn-pulse": "btn-pulse 1.8s ease-out infinite",
         "usd-glow":  "usd-glow 2s ease-in-out infinite",
       },
     },

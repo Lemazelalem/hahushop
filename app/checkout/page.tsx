@@ -1473,7 +1473,7 @@ export default function CheckoutPage() {
               {paymentMethod === "stripe_card" && usdRate && (
                 <div
                   className="inline-flex items-center mt-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold animate-usd-glow"
-                  style={{ background: "#EE82EE", color: "#FF1493" }}
+                  style={{ background: "#EE82EE", color: "#ffffff" }}
                 >
                   ≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD
                 </div>
@@ -1503,7 +1503,7 @@ export default function CheckoutPage() {
         type="button"
         disabled={placingOrder || !hasAnyItems || !isShippingValid() || !isPaymentMethodActive}
         onClick={handlePlaceOrder}
-        className="w-full h-11 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[15px] shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 animate-btn-glow disabled:animate-none"
+        className="w-full h-11 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 animate-btn-pulse disabled:shadow-none"
       >
         {placingOrder ? (
           <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing</>
