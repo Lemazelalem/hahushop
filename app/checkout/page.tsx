@@ -1469,7 +1469,10 @@ export default function CheckoutPage() {
           <div className="flex items-end justify-between">
             <div>
               <div className="text-[10px] font-semibold text-slate-500">Total</div>
-              <div className="text-[20px] leading-none font-black text-slate-900 mt-0.5">{money(totalCents)}</div>
+              <div className="text-[16px] leading-none font-medium text-slate-700 mt-0.5">{money(totalCents)}</div>
+              {paymentMethod === "stripe_card" && usdRate && (
+                <div className="text-[10px] text-slate-400 mt-1">≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD</div>
+              )}
             </div>
             <div className="text-right text-[9px] text-slate-500">
               {isBusinessOrder ? "Invoice later" : paymentMethod === "stripe_card" ? "Card payment" : "Pay on delivery"}
@@ -1490,21 +1493,12 @@ export default function CheckoutPage() {
 
   {/* Sticky bottom bar */}
   <div className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)]">
-    <div className="px-3 py-2.5 flex items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
-        <div className="text-[14px] font-medium text-slate-600">{money(totalCents)}</div>
-        {paymentMethod === "stripe_card" && usdRate ? (
-          <div className="text-[10px] text-slate-400 mt-0.5">≈ ${(totalCents / 100 * usdRate).toFixed(2)} USD · free shipping</div>
-        ) : (
-          <div className="text-[9px] text-slate-500">{displayedItemCount} item{displayedItemCount !== 1 ? "s" : ""} · free shipping</div>
-        )}
-      </div>
+    <div className="px-3 py-2.5">
       <button
         type="button"
         disabled={placingOrder || !hasAnyItems || !isShippingValid() || !isPaymentMethodActive}
         onClick={handlePlaceOrder}
-        className="h-11 px-5 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[12px] shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        className="w-full h-11 rounded-full bg-[#ff0050] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black text-[12px] shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
       >
         {placingOrder ? (
           <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing</>
@@ -1520,6 +1514,7 @@ export default function CheckoutPage() {
   </div>
 
 </div>
+
 
       {/* ───────────────── DESKTOP ───────────────── */}
       <div className="hidden md:block">
