@@ -832,6 +832,24 @@ export default function SellerDashboardPage() {
     }
   };
 
+  // swipe-from-left to open drawer
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (touchStartX.current < 40 && dx > 60) setIsDrawerOpen(true);
+      else if (dx < -60) setIsDrawerOpen(false);
+      touchStartX.current = null;
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   const saveBankInfo = async () => {
     setBankSaving(true);
     setBankSaveMsg(null);
@@ -1022,24 +1040,6 @@ export default function SellerDashboardPage() {
       </main>
     );
   }
-
-  // swipe-from-left to open drawer
-  useEffect(() => {
-    const onTouchStart = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
-    const onTouchEnd = (e: TouchEvent) => {
-      if (touchStartX.current === null) return;
-      const dx = e.changedTouches[0].clientX - touchStartX.current;
-      if (touchStartX.current < 40 && dx > 60) setIsDrawerOpen(true);
-      else if (dx < -60) setIsDrawerOpen(false);
-      touchStartX.current = null;
-    };
-    document.addEventListener("touchstart", onTouchStart, { passive: true });
-    document.addEventListener("touchend", onTouchEnd, { passive: true });
-    return () => {
-      document.removeEventListener("touchstart", onTouchStart);
-      document.removeEventListener("touchend", onTouchEnd);
-    };
-  }, []);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-lime-50/30 to-blue-50/30">
