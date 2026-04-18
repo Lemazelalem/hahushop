@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMiniCart } from "@/components/MiniCartProvider";
-import { useState, useEffect, useMemo } from "react";
-import { Menu, X, ShoppingCart, BadgeCheck } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import {
+  Menu, X, ShoppingCart, BadgeCheck,
+  User, Package, CreditCard, Landmark, LayoutDashboard,
+  Tag, Sparkles, Phone, ChevronRight, LogIn, UserPlus,
+  MapPin, FileText, Shield,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 const BASE_NAV_ITEMS = [
@@ -22,10 +27,12 @@ type ProfileRow = {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { itemCount: count } = useMiniCart();
 
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   const [authLoaded, setAuthLoaded] = useState(false);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -103,6 +110,32 @@ export default function Navbar() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Swipe from left edge to open drawer
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (touchStartX.current < 40 && dx > 60) setIsDrawerOpen(true);
+      else if (dx < -60) setIsDrawerOpen(false);
+      touchStartX.current = null;
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    setIsDrawerOpen(false);
+    await supabase.auth.signOut();
+    router.push("/");
+  }, [router]);
 
   // Role-based nav items
   const navItems = useMemo(() => {
@@ -219,13 +252,10 @@ export default function Navbar() {
           {/* Mobile Menu Button */}
           <button
             className="lg:hidden p-2.5 text-white hover:bg-white/10 rounded-xl transition-colors"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            onClick={() => setIsDrawerOpen(true)}
+            aria-label="Open menu"
           >
-            {isMobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
+            <Menu className="w-6 h-6" />
           </button>
 
           {/* RIGHT: Role + Cart - Desktop */}
@@ -307,76 +337,240 @@ export default function Navbar() {
         </div>
 
         {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-white/10 px-5 pb-5">
-            <nav className="flex flex-col gap-2 pt-4">
-              {navItems.map((item) => {
-                const active = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`px-5 py-3.5 rounded-xl text-sm font-medium transition-all ${
-                      active
-                        ? "bg-white text-slate-900 shadow-lg"
-                        : "text-slate-300 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+      </div>
 
-              {/* Mobile Public Employee - Only for customers */}
-              {isCustomer && (
-                <Link
-                  href="/public-employee"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="mt-3 flex items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 px-5 py-4 text-base font-bold text-slate-900 shadow-lg shadow-orange-500/30 active:scale-95 transition-transform"
-                >
-                  <span className="text-2xl">🎖️</span>
-                  <span>Public Employee Deals</span>
-                  {isVerifiedPE && <BadgeCheck className="w-5 h-5" />}
-                </Link>
-              )}
+      {/* ─── Left Drawer Overlay ─── */}
+      <div
+        className={`fixed inset-0 z-[200] transition-all duration-300 ${
+          isDrawerOpen ? "visible" : "invisible pointer-events-none"
+        }`}
+      >
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-300 ${
+            isDrawerOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => setIsDrawerOpen(false)}
+        />
 
-              {/* Mobile Cart & Role */}
-              <div className="flex items-center gap-3 mt-5 pt-5 border-t border-white/10">
-                <div
-                  className={`flex items-center gap-2.5 text-sm px-2 ${
-                    isAdmin
-                      ? "text-red-400"
-                      : isSeller
-                      ? "text-lime-400"
-                      : "text-emerald-400"
-                  }`}
-                >
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full animate-pulse ${
-                      isAdmin
-                        ? "bg-red-400"
-                        : isSeller
-                        ? "bg-lime-400"
-                        : "bg-emerald-400"
-                    }`}
-                  />
-                  <span>{roleLabel}</span>
+        {/* Panel */}
+        <div
+          className={`absolute left-0 top-0 h-full w-[280px] bg-slate-950 border-r border-white/10 flex flex-col shadow-2xl shadow-slate-950/80 transition-transform duration-300 ease-out ${
+            isDrawerOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {/* Drawer Header */}
+          <div className="flex items-center justify-between px-5 pt-12 pb-5 border-b border-white/10 flex-shrink-0">
+            <Link href="/" onClick={() => setIsDrawerOpen(false)} className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-white via-slate-100 to-slate-200 flex items-center justify-center shadow-lg">
+                <span className="text-xl">🛍️</span>
+              </div>
+              <div className="leading-tight">
+                <div className="text-base font-bold text-white">
+                  Shop<span className="text-emerald-400">Ease</span>
                 </div>
-                {(isCustomer || isGuest) && (
-                  <Link
-                    href="/checkout"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex-1 flex items-center justify-center gap-2.5 bg-white text-slate-900 rounded-xl py-3.5 font-bold hover:bg-emerald-50 transition-colors"
-                  >
-                    <ShoppingCart className="w-5 h-5" />
-                    Cart ({count})
+                <div className="text-[10px] text-slate-500 uppercase tracking-widest">Curated for you</div>
+              </div>
+            </Link>
+            <button
+              onClick={() => setIsDrawerOpen(false)}
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Role Badge */}
+          {authLoaded && profile && (
+            <div className="px-5 pt-4 pb-1 flex-shrink-0">
+              <div
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${
+                  isAdmin
+                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                    : isSeller
+                    ? "bg-lime-500/10 border-lime-500/30 text-lime-400"
+                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full animate-pulse ${
+                    isAdmin ? "bg-red-400" : isSeller ? "bg-lime-400" : "bg-emerald-400"
+                  }`}
+                />
+                {roleLabel}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+
+            {/* Account section */}
+            {authLoaded && profile && (
+              <div>
+                <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Account</p>
+                <div className="space-y-0.5">
+                  <Link href="/account" onClick={() => setIsDrawerOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                    <User className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                    <span className="text-sm font-medium flex-1">My Account</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                  </Link>
+
+                  {isCustomer && (
+                    <>
+                      <Link href="/my-orders" onClick={() => setIsDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                        <Package className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                        <span className="text-sm font-medium flex-1">My Orders</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                      </Link>
+                      <Link href="/track" onClick={() => setIsDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                        <MapPin className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                        <span className="text-sm font-medium flex-1">Track Order</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                      </Link>
+                    </>
+                  )}
+
+                  {isSeller && (
+                    <>
+                      <Link href="/seller" onClick={() => setIsDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                        <LayoutDashboard className="w-4 h-4 text-slate-500 group-hover:text-lime-400 transition-colors flex-shrink-0" />
+                        <span className="text-sm font-medium flex-1">Seller Dashboard</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                      </Link>
+                      <Link href="/seller/payouts" onClick={() => setIsDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                        <CreditCard className="w-4 h-4 text-slate-500 group-hover:text-lime-400 transition-colors flex-shrink-0" />
+                        <span className="text-sm font-medium flex-1">Payouts</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                      </Link>
+                      <Link href="/seller" onClick={() => setIsDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                        <Landmark className="w-4 h-4 text-slate-500 group-hover:text-lime-400 transition-colors flex-shrink-0" />
+                        <span className="text-sm font-medium flex-1">Bank Information</span>
+                        <span className="text-[10px] text-slate-600 group-hover:text-slate-500">More tab</span>
+                      </Link>
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    <Link href="/admin" onClick={() => setIsDrawerOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                      <LayoutDashboard className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition-colors flex-shrink-0" />
+                      <span className="text-sm font-medium flex-1">Admin Dashboard</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Explore */}
+            <div>
+              <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Explore</p>
+              <div className="space-y-0.5">
+                <Link href="/shop" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <ShoppingCart className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Shop</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                <Link href="/categories" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <Tag className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Categories</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                <Link href="/deals" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <Sparkles className="w-4 h-4 text-slate-500 group-hover:text-amber-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Deals</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                <Link href="/specials" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <Tag className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Specials</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                {isCustomer && (
+                  <Link href="/public-employee" onClick={() => setIsDrawerOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors group">
+                    <span className="text-base flex-shrink-0">🎖️</span>
+                    <span className="text-sm font-medium flex-1">Public Employee</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-amber-600 group-hover:text-amber-400 transition-colors" />
                   </Link>
                 )}
               </div>
-            </nav>
+            </div>
+
+            {/* Support */}
+            <div>
+              <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Support</p>
+              <div className="space-y-0.5">
+                <Link href="/contact" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <Phone className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Contact Us</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                <Link href="/privacy" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <Shield className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Privacy Policy</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+                <Link href="/terms" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors group">
+                  <FileText className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                  <span className="text-sm font-medium flex-1">Terms of Service</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </Link>
+              </div>
+            </div>
+          </nav>
+
+          {/* Footer: Cart + Sign In/Out */}
+          <div className="flex-shrink-0 p-4 border-t border-white/10 space-y-2 pb-8">
+            {(isCustomer || isGuest) && (
+              <Link href="/checkout" onClick={() => setIsDrawerOpen(false)}
+                className="flex items-center justify-center gap-2.5 py-3 rounded-xl bg-white text-slate-900 font-bold text-sm hover:bg-emerald-50 transition-colors relative">
+                <ShoppingCart className="w-4 h-4" />
+                <span>Cart</span>
+                {count > 0 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[1.5rem] text-center">
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
+              </Link>
+            )}
+            {authLoaded && profile ? (
+              <button onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white text-sm font-medium transition-all">
+                <LogIn className="w-4 h-4 rotate-180" />
+                Sign Out
+              </button>
+            ) : authLoaded ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Link href="/auth/login" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-sm font-medium transition-all">
+                  <LogIn className="w-4 h-4" />
+                  Sign In
+                </Link>
+                <Link href="/auth/signup" onClick={() => setIsDrawerOpen(false)}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold transition-colors">
+                  <UserPlus className="w-4 h-4" />
+                  Sign Up
+                </Link>
+              </div>
+            ) : null}
           </div>
-        )}
+        </div>
       </div>
     </header>
   );
