@@ -1543,59 +1543,58 @@ export default function SellerDashboardPage() {
                   const shortId = order.order_id.slice(0, 8).toUpperCase();
                   const isPaid = order.order_payment_status === "paid";
                   const isCancelled = order.order_status === "cancelled";
+                  const totalQty = order.items.reduce((s, i) => s + Math.max(0, Number(i.quantity ?? 0)), 0);
+                  const orderDt = new Date(order.order_created_at);
+                  const dateStr = orderDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  const timeStr = orderDt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
                   return (
                     <div key={order.order_id} className="rounded-xl border border-slate-200 bg-slate-50/60 overflow-hidden">
                       {/* Order header */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-100">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs font-bold text-slate-700">#{shortId}</span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             isPaid ? "bg-emerald-100 text-emerald-700" :
                             isCancelled ? "bg-rose-100 text-rose-700" :
                             "bg-amber-100 text-amber-700"
                           }`}>
-                            {isPaid ? "Paid" : isCancelled ? "Cancelled" : "Unpaid"}
+                            {isPaid ? "✓ Paid" : isCancelled ? "Cancelled" : "⏳ Unpaid"}
                           </span>
+                          {order.order_status && order.order_status !== "cancelled" && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
+                              {order.order_status}
+                            </span>
+                          )}
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-black text-slate-900">
-                            ETB {(order.seller_total_cents / 100).toFixed(0)}
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            {new Date(order.order_created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          </div>
+                          <p className="text-xs font-semibold text-slate-700">{totalQty} {totalQty === 1 ? "item" : "items"}</p>
+                          <p className="text-[10px] text-slate-400">🕐 {dateStr} · {timeStr}</p>
                         </div>
                       </div>
                       {/* Items */}
-                      <div className="px-4 py-2.5 space-y-2">
-                        {order.items.map((item) => (
-                          <div key={item.id} className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
-                              {item.image_url_snapshot
-                                ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
-                                : item.emoji_snapshot ?? "📦"}
+                      <div className="divide-y divide-slate-100">
+                        {order.items.map((item) => {
+                          const variantParts = [item.color_name, item.size_label].filter(Boolean);
+                          return (
+                            <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
+                                {item.image_url_snapshot
+                                  ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
+                                  : item.emoji_snapshot ?? "📦"}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 truncate">{item.name_snapshot}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">Qty {item.quantity}</span>
+                                  {variantParts.map((v, i) => (
+                                    <span key={i} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">{v}</span>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 truncate">{item.name_snapshot}</p>
-                              <p className="text-[10px] text-slate-400">
-                                Qty {item.quantity}
-                                {item.color_name ? ` · ${item.color_name}` : ""}
-                                {item.size_label ? ` · ${item.size_label}` : ""}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold text-slate-700 flex-shrink-0">
-                              ETB {((item.line_total_cents ?? 0) / 100).toFixed(0)}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      {/* Delivery */}
-                      {order.shipping_full_name && (
-                        <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-500">
-                          <span>📍</span>
-                          <span>{order.shipping_full_name} · {order.shipping_city}, {order.shipping_region} · {order.shipping_phone}</span>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1997,17 +1996,22 @@ export default function SellerDashboardPage() {
                   {sellerOrders.slice(0, 3).map((order) => {
                     const isPaid = order.order_payment_status === "paid";
                     const shortId = order.order_id.slice(0, 8).toUpperCase();
+                    const totalQty = order.items.reduce((s, i) => s + Math.max(0, Number(i.quantity ?? 0)), 0);
+                    const orderDt = new Date(order.order_created_at);
+                    const dateStr = orderDt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    const timeStr = orderDt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
                     return (
                       <div key={order.order_id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs font-bold text-slate-600">#{shortId}</span>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                             {isPaid ? "Paid" : "Unpaid"}
                           </span>
                         </div>
-                        <span className="text-sm font-black text-slate-900">
-                          ETB {(order.seller_total_cents / 100).toFixed(0)}
-                        </span>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-700">{totalQty} {totalQty === 1 ? "item" : "items"}</p>
+                          <p className="text-[9px] text-slate-400">{dateStr} · {timeStr}</p>
+                        </div>
                       </div>
                     );
                   })}
@@ -2073,49 +2077,70 @@ export default function SellerDashboardPage() {
                 const shortId = order.order_id.slice(0, 8).toUpperCase();
                 const isPaid = order.order_payment_status === "paid";
                 const isCancelled = order.order_status === "cancelled";
+                const totalQty = order.items.reduce((s, i) => s + Math.max(0, Number(i.quantity ?? 0)), 0);
+                const orderDt = new Date(order.order_created_at);
+                const dateStr = orderDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                const timeStr = orderDt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
                 return (
-                  <div key={order.order_id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-slate-700">#{shortId}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          isPaid ? "bg-emerald-100 text-emerald-700" :
-                          isCancelled ? "bg-rose-100 text-rose-700" :
-                          "bg-amber-100 text-amber-700"
-                        }`}>
-                          {isPaid ? "Paid" : isCancelled ? "Cancelled" : "Unpaid"}
+                  <div key={order.order_id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-black text-slate-800">#{shortId}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isPaid ? "bg-emerald-100 text-emerald-700" :
+                            isCancelled ? "bg-rose-100 text-rose-700" :
+                            "bg-amber-100 text-amber-700"
+                          }`}>
+                            {isPaid ? "✓ Paid" : isCancelled ? "Cancelled" : "⏳ Unpaid"}
+                          </span>
+                          {order.order_status && order.order_status !== "cancelled" && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 capitalize">
+                              {order.order_status}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                          {totalQty} {totalQty === 1 ? "item" : "items"}
                         </span>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-black text-slate-900">ETB {(order.seller_total_cents / 100).toFixed(0)}</div>
-                        <div className="text-[10px] text-slate-400">
-                          {new Date(order.order_created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </div>
-                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        🕐 {dateStr} · {timeStr}
+                      </p>
                     </div>
-                    <div className="px-4 py-2.5 space-y-2">
-                      {order.items.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
-                            {item.image_url_snapshot
-                              ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
-                              : item.emoji_snapshot ?? "📦"}
+
+                    {/* Item rows */}
+                    <div className="divide-y divide-slate-50">
+                      {order.items.map((item) => {
+                        const variantParts = [
+                          item.color_name,
+                          item.size_label,
+                        ].filter(Boolean);
+                        return (
+                          <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-base">
+                              {item.image_url_snapshot
+                                ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
+                                : item.emoji_snapshot ?? "📦"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-900 truncate">{item.name_snapshot}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                                  Qty {item.quantity}
+                                </span>
+                                {variantParts.map((v, i) => (
+                                  <span key={i} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                                    {v}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 truncate">{item.name_snapshot}</p>
-                            <p className="text-[10px] text-slate-400">
-                              Qty {item.quantity}{item.size_label ? ` · ${item.size_label}` : ""}
-                            </p>
-                          </div>
-                          <div className="text-xs font-bold text-slate-700">ETB {((item.line_total_cents ?? 0) / 100).toFixed(0)}</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
-                    {order.shipping_full_name && (
-                      <div className="px-4 py-2 border-t border-slate-100 text-[10px] text-slate-500">
-                        📍 {order.shipping_full_name} · {order.shipping_city} · {order.shipping_phone}
-                      </div>
-                    )}
                   </div>
                 );
               })
