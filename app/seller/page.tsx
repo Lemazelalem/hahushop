@@ -2014,6 +2014,41 @@ export default function SellerDashboardPage() {
                 </div>
               </div>
             )}
+
+            {/* Recent Sales */}
+            {soldItems.length > 0 && (
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <h3 className="font-bold text-slate-900 text-sm">Recent Sales</h3>
+                  {newSaleCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[9px] font-bold">{newSaleCount} new</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {soldItems.slice(0, 5).map((sale) => (
+                    <div key={sale.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80">
+                      <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {sale.image_url_snapshot
+                          ? <img src={sale.image_url_snapshot} alt={sale.name_snapshot} className="w-full h-full object-cover" />
+                          : <span className="text-base">{sale.emoji_snapshot ?? "📦"}</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{sale.name_snapshot}</p>
+                        <p className="text-[10px] text-slate-400">
+                          Qty {sale.quantity} · {sale.line_total_cents ? `ETB ${(sale.line_total_cents / 100).toFixed(0)}` : "—"}
+                        </p>
+                      </div>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        sale.order_payment_status === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {sale.order_payment_status === "paid" ? "Paid" : "Pending"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2294,6 +2329,12 @@ export default function SellerDashboardPage() {
                             </span>
                             <span className="text-[10px] text-slate-400">{formatMoney(product.seller_price_cents)}</span>
                           </div>
+                          {product.status === "draft" && (
+                            <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Tap to review &amp; submit →</p>
+                          )}
+                          {product.status === "rejected" && (
+                            <p className="text-[9px] text-rose-600 font-semibold mt-0.5">Tap to fix &amp; resubmit →</p>
+                          )}
                         </div>
                         <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                       </div>
@@ -2303,20 +2344,24 @@ export default function SellerDashboardPage() {
               )}
             </div>
 
-            {/* Edit Info */}
-            <section className="glass-card rounded-2xl p-4">
+            {/* Edit Info — all fields, matching desktop */}
+            <section className={`glass-card rounded-2xl p-4 ${!hasBankInfo ? "border border-amber-200/60 bg-gradient-to-br from-amber-50/60 to-white/80" : ""}`}>
               <button
                 onClick={() => setShowEditInfo((prev) => !prev)}
                 className="w-full flex items-center justify-between"
               >
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Settings className="w-4 h-4 text-slate-400" />
-                  Edit Your Information
-                </h3>
+                  <h3 className="font-semibold text-slate-900 text-sm">Edit Your Information</h3>
+                  {!hasBankInfo && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Bank missing</span>
+                  )}
+                </div>
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showEditInfo ? "rotate-180" : ""}`} />
               </button>
               {showEditInfo && (
                 <div className="mt-4 pt-4 border-t border-slate-200/70 space-y-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Contact</p>
                   <input type="text" value={profileForm.displayName}
                     onChange={(e) => setProfileForm((prev) => ({ ...prev, displayName: e.target.value }))}
                     placeholder="Store Display Name"
@@ -2332,16 +2377,61 @@ export default function SellerDashboardPage() {
                     placeholder="Phone (+251...)"
                     className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
                   />
-                  <input type="text" value={profileForm.city}
-                    onChange={(e) => setProfileForm((prev) => ({ ...prev, city: e.target.value }))}
-                    placeholder="City"
+                  <input type="email" value={profileForm.email} disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-100/80 px-3 py-2.5 text-sm text-slate-400"
+                  />
+
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 pt-1">Address</p>
+                  <input type="text" value={profileForm.addressLine1}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, addressLine1: e.target.value }))}
+                    placeholder="Street, building, landmark"
                     className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
                   />
-                  <input type="text" value={profileForm.subcity}
-                    onChange={(e) => setProfileForm((prev) => ({ ...prev, subcity: e.target.value }))}
-                    placeholder="Subcity / Area"
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" value={profileForm.city}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, city: e.target.value }))}
+                      placeholder="City"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                    <input type="text" value={profileForm.subcity}
+                      onChange={(e) => setProfileForm((prev) => ({ ...prev, subcity: e.target.value }))}
+                      placeholder="Subcity"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                  </div>
+                  <textarea value={profileForm.notes}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    rows={2}
+                    placeholder="Contact notes (call time, hints…)"
                     className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
                   />
+
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 pt-1 flex items-center gap-1.5">
+                    <Wallet className="w-3 h-3 text-amber-500" />
+                    Payout Bank
+                    {!hasBankInfo && <span className="text-amber-600 font-bold">— required for payouts</span>}
+                  </p>
+                  <input type="text" value={bankForm.bankName}
+                    onChange={(e) => setBankForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                    placeholder="Bank Name (e.g. Commercial Bank of Ethiopia)"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={bankForm.accountHolder}
+                    onChange={(e) => setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))}
+                    placeholder="Account Holder Name"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={bankForm.accountNumber}
+                    onChange={(e) => setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                    placeholder="Account Number"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={bankForm.branch}
+                    onChange={(e) => setBankForm((prev) => ({ ...prev, branch: e.target.value }))}
+                    placeholder="Branch (optional)"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+
                   <button
                     onClick={saveSellerInfo}
                     disabled={infoSaving}
@@ -2354,47 +2444,33 @@ export default function SellerDashboardPage() {
               )}
             </section>
 
-            {/* Bank info banner */}
-            {!hasBankInfo && (
-              <section className="glass-card rounded-2xl p-4 border border-amber-200/70 bg-amber-50/40">
-                <button
-                  onClick={() => setShowBankBannerForm((prev) => !prev)}
-                  className="w-full flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm font-semibold text-slate-900">Add Bank Info</span>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showBankBannerForm ? "rotate-180" : ""}`} />
-                </button>
-                {showBankBannerForm && (
-                  <div className="mt-3 pt-3 border-t border-amber-200/70 space-y-3">
-                    <input type="text" value={bankForm.bankName}
-                      onChange={(e) => setBankForm((prev) => ({ ...prev, bankName: e.target.value }))}
-                      placeholder="Bank Name (e.g. CBE)"
-                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-                    />
-                    <input type="text" value={bankForm.accountHolder}
-                      onChange={(e) => setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))}
-                      placeholder="Account Holder Name"
-                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-                    />
-                    <input type="text" value={bankForm.accountNumber}
-                      onChange={(e) => setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
-                      placeholder="Account Number"
-                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
-                    />
-                    <button
-                      onClick={saveBankInfo}
-                      disabled={bankSaving}
-                      className="w-full py-2.5 rounded-xl bg-lime-500 text-white text-sm font-semibold disabled:opacity-60"
-                    >
-                      {bankSaving ? "Saving..." : "Save Bank Details"}
-                    </button>
-                    {bankSaveMsg && <p className="text-xs text-slate-600">{bankSaveMsg}</p>}
-                  </div>
-                )}
-              </section>
+            {/* Recent Activity */}
+            {activities.length > 0 && (
+              <div className="glass-card rounded-2xl p-4">
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  Recent Activity
+                </h3>
+                <div className="space-y-2">
+                  {activities.map((activity, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-50/80">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        activity.type === "product" ? "bg-lime-100 text-lime-600" :
+                        activity.type === "payout" ? "bg-emerald-100 text-emerald-600" :
+                        "bg-blue-100 text-blue-600"
+                      }`}>
+                        {activity.type === "product" ? <Package className="w-3.5 h-3.5" /> :
+                         activity.type === "payout" ? <DollarSign className="w-3.5 h-3.5" /> :
+                         <CheckCircle2 className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-900 truncate">{activity.message}</p>
+                        <p className="text-[10px] text-slate-400">{formatRelativeTime(activity.time)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Quick links + sign out */}
