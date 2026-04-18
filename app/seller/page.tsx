@@ -1,11 +1,12 @@
 // app/seller/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Bell,
+  Menu,
   Package,
   Plus,
   Home,
@@ -201,6 +202,9 @@ export default function SellerDashboardPage() {
   const [soldByProductToday, setSoldByProductToday] = useState<Record<string, number>>({});
   const [liveStockDeltaByProduct, setLiveStockDeltaByProduct] = useState<Record<string, number>>({});
   const [newSaleCount, setNewSaleCount] = useState(0);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
   const [bankSaving, setBankSaving] = useState(false);
   const [bankSaveMsg, setBankSaveMsg] = useState<string | null>(null);
   const [showBankBannerForm, setShowBankBannerForm] = useState(false);
@@ -1019,12 +1023,166 @@ export default function SellerDashboardPage() {
     );
   }
 
+  // swipe-from-left to open drawer
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (touchStartX.current < 40 && dx > 60) setIsDrawerOpen(true);
+      else if (dx < -60) setIsDrawerOpen(false);
+      touchStartX.current = null;
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-lime-50/30 to-blue-50/30">
+
+      {/* ── LEFT SIDE DRAWER ── */}
+      <div className={`fixed inset-0 z-[300] transition-all duration-300 ${isDrawerOpen ? "visible" : "invisible pointer-events-none"}`}>
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 ${isDrawerOpen ? "opacity-100" : "opacity-0"}`}
+          onClick={() => setIsDrawerOpen(false)}
+        />
+        {/* Panel */}
+        <div className={`absolute left-0 top-0 h-full w-72 bg-white flex flex-col shadow-2xl transition-transform duration-300 ease-out ${isDrawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          {/* Drawer header */}
+          <div className="flex items-center justify-between px-5 pt-12 pb-4 bg-gradient-to-br from-lime-500 to-blue-600 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center">
+                <Store className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base leading-tight">My Store</p>
+                <p className="text-white/70 text-xs truncate max-w-[140px]">{signedInAs ?? "Seller"}</p>
+              </div>
+            </div>
+            <button onClick={() => setIsDrawerOpen(false)} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
+
+            {/* Dashboard */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dashboard</p>
+              <div className="space-y-0.5">
+                {(["home","orders","stock","more"] as const).map((tab) => {
+                  const icons = { home: Home, orders: ShoppingBag, stock: Box, more: Settings };
+                  const labels = { home: "Home", orders: "Orders", stock: "Stock", more: "More / Settings" };
+                  const Icon = icons[tab];
+                  const active = activeTab === tab;
+                  return (
+                    <button key={tab} onClick={() => { setActiveTab(tab); setIsDrawerOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        active ? "bg-lime-50 text-lime-700 border border-lime-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`}>
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-lime-600" : "text-slate-400"}`} />
+                      <span className="flex-1 text-left">{labels[tab]}</span>
+                      {active && <span className="w-1.5 h-1.5 rounded-full bg-lime-500" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Products */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Products</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { setActiveTab("more"); setStatusFilter("draft"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Draft Products</span>
+                  {draftProducts.length > 0 && (
+                    <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{draftProducts.length}</span>
+                  )}
+                </button>
+                <button onClick={() => { router.push("/seller/products/new"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-lime-700 hover:bg-lime-50 transition-colors">
+                  <Plus className="w-4 h-4 text-lime-500 flex-shrink-0" />
+                  <span className="flex-1 text-left">Add New Product</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Financials */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Financials</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/seller/payouts"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Wallet className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Payouts</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                <button onClick={() => { setActiveTab("more"); setIsDrawerOpen(false); setTimeout(() => setShowBankBannerForm(true), 200); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Bank Information</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            {/* Account */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Account</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/seller/verification"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${verification.status === "approved" ? "text-emerald-500" : "text-slate-400"}`} />
+                  <span className="flex-1 text-left">Verification</span>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    verification.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                    verification.status === "pending" ? "bg-amber-100 text-amber-700" :
+                    verification.status === "rejected" ? "bg-rose-100 text-rose-700" :
+                    "bg-slate-100 text-slate-500"
+                  }`}>{verification.status === "none" ? "Not submitted" : verification.status}</span>
+                </button>
+                <button onClick={() => { router.push("/"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Home className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Back to Home</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+          </nav>
+
+          {/* Sign out */}
+          <div className="flex-shrink-0 p-4 border-t border-slate-200 pb-8">
+            <button
+              onClick={async () => { setIsDrawerOpen(false); await supabase.auth.signOut(); router.push("/"); }}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 text-sm font-semibold transition-all border border-slate-200 hover:border-rose-200"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Top Navigation */}
       <header className="sticky top-0 z-40 glass-morphism border-b border-slate-200/40 px-4 md:px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="p-2 rounded-xl hover:bg-slate-100/80 transition-colors flex-shrink-0"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5 text-slate-700" />
+            </button>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-lime-400 to-blue-500 flex items-center justify-center">
               <Store className="w-5 h-5 text-white" />
             </div>
