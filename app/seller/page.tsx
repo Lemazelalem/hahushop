@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Bell,
@@ -156,7 +156,6 @@ type SellerProfileForm = {
 
 export default function SellerDashboardPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [createdBanner, setCreatedBanner] = useState(false);
@@ -574,16 +573,16 @@ export default function SellerDashboardPage() {
 
   // Handle ?success=product_created redirect — show banner & switch to More tab
   useEffect(() => {
-    if (searchParams.get("success") === "product_created") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "product_created") {
       setCreatedBanner(true);
       setActiveTab("more");
       setStatusFilter("draft");
       sessionStorage.setItem("sellerActiveTab", "more");
-      // clean up URL
       window.history.replaceState(null, "", "/seller");
       setTimeout(() => setCreatedBanner(false), 6000);
     }
-  }, [searchParams]);
+  }, []);
 
   const draftProducts = useMemo(
     () => products.filter((p) => p.status === "draft"),
