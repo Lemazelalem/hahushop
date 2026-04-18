@@ -207,6 +207,7 @@ export default function SellerDashboardPage() {
 
   const [bankSaving, setBankSaving] = useState(false);
   const [bankSaveMsg, setBankSaveMsg] = useState<string | null>(null);
+  const [showBankOnly, setShowBankOnly] = useState(false);
   const [showBankBannerForm, setShowBankBannerForm] = useState(false);
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [infoSaving, setInfoSaving] = useState(false);
@@ -1125,7 +1126,7 @@ export default function SellerDashboardPage() {
                   <span className="flex-1 text-left">Payouts</span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                 </button>
-                <button onClick={() => { setActiveTab("more"); setIsDrawerOpen(false); setTimeout(() => { setShowEditInfo(true); setShowBankBannerForm(true); }, 200); }}
+                <button onClick={() => { setShowBankOnly(true); setIsDrawerOpen(false); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                   <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <span className="flex-1 text-left">Bank Information</span>
@@ -1171,6 +1172,83 @@ export default function SellerDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── BANK INFO FULL-SCREEN OVERLAY ── */}
+      {showBankOnly && (
+        <div className="fixed inset-0 z-[400] bg-slate-50 flex flex-col overflow-y-auto">
+          {/* Header */}
+          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-4 bg-white border-b border-slate-200 shadow-sm">
+            <button
+              onClick={() => setShowBankOnly(false)}
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-700" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-lime-100 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-lime-700" />
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-900 text-base">Payout Bank Information</h2>
+                <p className="text-xs text-slate-500">Ethiopian bank details for payouts</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="flex-1 p-4 max-w-xl mx-auto w-full space-y-4 pb-10">
+            {bankSaveMsg && (
+              <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
+                bankSaveMsg.toLowerCase().includes("error") || bankSaveMsg.toLowerCase().includes("fail")
+                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              }`}>{bankSaveMsg}</div>
+            )}
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank Name</span>
+              <input type="text" value={bankForm.bankName}
+                onChange={(e) => setBankForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                placeholder="e.g. Commercial Bank of Ethiopia"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Holder Name</span>
+              <input type="text" value={bankForm.accountHolder}
+                onChange={(e) => setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))}
+                placeholder="Full name as on the account"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Account Number</span>
+              <input type="text" value={bankForm.accountNumber}
+                onChange={(e) => setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                placeholder="Enter bank account number"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Branch <span className="font-normal normal-case text-slate-400">(optional)</span></span>
+              <input type="text" value={bankForm.branch}
+                onChange={(e) => setBankForm((prev) => ({ ...prev, branch: e.target.value }))}
+                placeholder="e.g. Bole Branch"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Notes <span className="font-normal normal-case text-slate-400">(optional)</span></span>
+              <input type="text" value={bankForm.notes}
+                onChange={(e) => setBankForm((prev) => ({ ...prev, notes: e.target.value }))}
+                placeholder="Any additional info"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-lime-500/40" />
+            </label>
+            <button
+              onClick={async () => { await saveBankInfo(); }}
+              disabled={bankSaving}
+              className="w-full py-3.5 rounded-xl bg-lime-500 hover:bg-lime-600 disabled:opacity-60 text-white font-bold text-sm transition-colors"
+            >
+              {bankSaving ? "Saving..." : "Save Bank Information"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Top Navigation */}
       <header className="sticky top-0 z-40 glass-morphism border-b border-slate-200/40 px-4 md:px-6 py-4">
