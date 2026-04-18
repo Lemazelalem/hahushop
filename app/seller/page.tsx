@@ -1125,7 +1125,7 @@ export default function SellerDashboardPage() {
                   <span className="flex-1 text-left">Payouts</span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                 </button>
-                <button onClick={() => { setActiveTab("more"); setIsDrawerOpen(false); setTimeout(() => setShowBankBannerForm(true), 200); }}
+                <button onClick={() => { setActiveTab("more"); setIsDrawerOpen(false); setTimeout(() => { setShowEditInfo(true); setShowBankBannerForm(true); }, 200); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                   <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <span className="flex-1 text-left">Bank Information</span>
@@ -1187,7 +1187,11 @@ export default function SellerDashboardPage() {
               <Store className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900">Seller Dashboard · የሻጭ ዳሽቦርድ</h1>
+              <h1
+                className="font-bold text-slate-900 cursor-pointer hover:text-lime-700 transition-colors"
+                onClick={() => setActiveTab("home")}
+                title="Go to Home"
+              >Seller Dashboard · የሻጭ ዳሽቦርድ</h1>
               <p className="text-xs text-slate-500">Manage your store</p>
             </div>
           </div>
@@ -2583,18 +2587,27 @@ export default function SellerDashboardPage() {
 
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="glass-card rounded-xl p-3 text-center">
+              <button
+                onClick={() => { setActiveTab("more"); setStatusFilter("all"); }}
+                className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-slate-300"
+              >
                 <span className="text-2xl font-black text-slate-900 block">{stats.total}</span>
                 <span className="text-[10px] text-slate-500">Products</span>
-              </div>
-              <div className="glass-card rounded-xl p-3 text-center">
+              </button>
+              <button
+                onClick={() => { setActiveTab("more"); setStatusFilter("approved"); }}
+                className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-emerald-300"
+              >
                 <span className="text-2xl font-black text-emerald-700 block">{stats.approved}</span>
                 <span className="text-[10px] text-emerald-600">Live</span>
-              </div>
-              <div className="glass-card rounded-xl p-3 text-center">
+              </button>
+              <button
+                onClick={() => setActiveTab("stock")}
+                className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-amber-300"
+              >
                 <span className="text-2xl font-black text-amber-700 block">{soldTodayTotal}</span>
                 <span className="text-[10px] text-amber-600">Sold today</span>
-              </div>
+              </button>
             </div>
 
             {/* Add Product CTA */}
