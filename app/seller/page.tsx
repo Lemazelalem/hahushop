@@ -76,6 +76,14 @@ type ActivityItem = {
   status?: string;
 };
 
+type NotifItem = {
+  id: string;
+  type: "order" | "product_approved" | "product_rejected" | "stock_low" | "stock_out";
+  message: string;
+  time: string;
+  read: boolean;
+};
+
 type SoldItem = {
   id: string;
   product_id: string;
@@ -180,6 +188,9 @@ export default function SellerDashboardPage() {
   const [sellerOrders, setSellerOrders] = useState<SellerOrder[]>([]);
   const [showOrders, setShowOrders] = useState(false);
   const [activeTab, setActiveTab] = useState<"home" | "orders" | "stock" | "more">("home");
+  const [notifications, setNotifications] = useState<NotifItem[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [salesByDay, setSalesByDay] = useState<SalesByDay[]>([]);
   const [soldTodayTotal, setSoldTodayTotal] = useState(0);
@@ -513,6 +524,37 @@ export default function SellerDashboardPage() {
       });
       setActivities(recentActivities.slice(0, 5));
 
+      // Build notifications from product statuses
+      const productNotifs: NotifItem[] = [];
+      (rows || []).forEach((p: ProductRow) => {
+        if (p.status === "approved") {
+          productNotifs.push({
+            id: `approved-${p.id}`,
+            type: "product_approved",
+            message: `"${p.name}" was approved and is now live`,
+            time: p.created_at,
+            read: false,
+          });
+        } else if (p.status === "rejected") {
+          productNotifs.push({
+            id: `rejected-${p.id}`,
+            type: "product_rejected",
+            message: `"${p.name}" was rejected — tap to fix and resubmit`,
+            time: p.created_at,
+            read: false,
+          });
+        }
+      });
+      // Newest first, cap at 30
+      productNotifs.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      setNotifications((prev) => {
+        // Merge with existing order notifications (added by real-time handler)
+        const orderNotifs = prev.filter((n) => n.type === "order");
+        const merged = [...orderNotifs, ...productNotifs].slice(0, 30);
+        merged.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        return merged;
+      });
+
     } catch (err: any) {
       console.error(err);
       setPageError(err.message || "Failed to load dashboard data.");
@@ -520,6 +562,17 @@ export default function SellerDashboardPage() {
       setLoading(false);
     }
   }, []);
+
+  // Restore last active tab when returning from a sub-page (product edit, verification, etc.)
+  useEffect(() => {
+    const saved = sessionStorage.getItem("sellerActiveTab");
+    if (saved) setActiveTab(saved as any);
+  }, []);
+
+  const switchTab = (tab: "home" | "orders" | "stock" | "more") => {
+    setActiveTab(tab);
+    sessionStorage.setItem("sellerActiveTab", tab);
+  };
 
   useEffect(() => {
     loadData();
@@ -559,6 +612,20 @@ export default function SellerDashboardPage() {
             return copy;
           });
           setNewSaleCount((prev) => prev + 1);
+
+          // Add new-order notification
+          const notifId = `order-${item.order_id ?? Date.now()}`;
+          setNotifications((prev) => {
+            if (prev.find((n) => n.id === notifId)) return prev;
+            const newNotif: NotifItem = {
+              id: notifId,
+              type: "order",
+              message: `New order: ${qty} × "${item.name_snapshot ?? "product"}"`,
+              time: new Date().toISOString(),
+              read: false,
+            };
+            return [newNotif, ...prev].slice(0, 30);
+          });
 
           // Server refetch to sync all order + sold data authoritatively
           fetch("/api/seller/orders")
@@ -639,6 +706,29 @@ export default function SellerDashboardPage() {
         return rank[a.level] - rank[b.level] || b.soldToday - a.soldToday;
       });
   }, [products, soldByProductToday, liveStockDeltaByProduct]);
+
+  // Stock-level notifications — runs after stockRows is computed
+  useEffect(() => {
+    if (stockRows.length === 0) return;
+    const stockNotifs: NotifItem[] = stockRows
+      .filter((r) => r.level === "out" || r.level === "low")
+      .map((r) => ({
+        id: `stock-${r.productId}`,
+        type: (r.level === "out" ? "stock_out" : "stock_low") as NotifItem["type"],
+        message: r.level === "out"
+          ? `"${r.productName}" is out of stock`
+          : `"${r.productName}" is running low (${r.liveStock} left)`,
+        time: new Date().toISOString(),
+        read: false,
+      }));
+    if (stockNotifs.length === 0) return;
+    setNotifications((prev) => {
+      const without = prev.filter((n) => !n.id.startsWith("stock-"));
+      const merged = [...stockNotifs, ...without].slice(0, 30);
+      merged.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      return merged;
+    });
+  }, [stockRows]);
 
   const formatMoney = (cents: number | null | undefined) => {
     if (!cents && cents !== 0) return "—";
@@ -916,14 +1006,14 @@ export default function SellerDashboardPage() {
               <Home className="w-5 h-5 text-slate-600" />
             </button>
             <button
-              onClick={() => setNewSaleCount(0)}
+              onClick={() => setShowNotifPanel((v) => !v)}
               className="relative p-2 rounded-lg hover:bg-slate-100/80 transition-colors"
-              title="Recent sales"
+              title="Notifications"
             >
-              <Bell className="w-5 h-5 text-slate-600" />
-              {newSaleCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
-                  {newSaleCount > 9 ? "9+" : newSaleCount}
+              <Bell className={`w-5 h-5 ${notifications.some((n) => !n.read) ? "text-indigo-600" : "text-slate-600"}`} />
+              {notifications.some((n) => !n.read) && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {notifications.filter((n) => !n.read).length > 9 ? "9+" : notifications.filter((n) => !n.read).length}
                 </span>
               )}
             </button>
@@ -944,6 +1034,88 @@ export default function SellerDashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* ── NOTIFICATION PANEL ── */}
+      {showNotifPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
+            onClick={() => setShowNotifPanel(false)}
+          />
+          {/* Panel */}
+          <div className="fixed top-[68px] right-3 left-3 md:left-auto md:right-6 md:w-96 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden max-h-[70vh] flex flex-col">
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <Bell className="w-4 h-4 text-indigo-500" />
+                Notifications
+                {notifications.some((n) => !n.read) && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[9px] font-bold">
+                    {notifications.filter((n) => !n.read).length} new
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => {
+                  setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                  setNewSaleCount(0);
+                }}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                Mark all read
+              </button>
+            </div>
+            {/* Notification list */}
+            <div className="overflow-y-auto flex-1">
+              {notifications.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Bell className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">No notifications yet</p>
+                </div>
+              ) : (
+                notifications.map((notif) => {
+                  const icons: Record<NotifItem["type"], string> = {
+                    order: "🛒",
+                    product_approved: "✅",
+                    product_rejected: "❌",
+                    stock_low: "⚠️",
+                    stock_out: "🚫",
+                  };
+                  const colors: Record<NotifItem["type"], string> = {
+                    order: "bg-indigo-50 border-indigo-100",
+                    product_approved: "bg-emerald-50 border-emerald-100",
+                    product_rejected: "bg-rose-50 border-rose-100",
+                    stock_low: "bg-amber-50 border-amber-100",
+                    stock_out: "bg-rose-50 border-rose-100",
+                  };
+                  return (
+                    <div
+                      key={notif.id}
+                      className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 ${notif.read ? "opacity-60" : ""} ${colors[notif.type]}`}
+                    >
+                      <span className="text-base flex-shrink-0 mt-0.5">{icons[notif.type]}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-900 leading-snug">{notif.message}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{formatRelativeTime(notif.time)}</p>
+                      </div>
+                      {!notif.read && (
+                        <button
+                          onClick={() => setNotifications((prev) =>
+                            prev.map((n) => n.id === notif.id ? { ...n, read: true } : n)
+                          )}
+                          className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0 mt-1.5 hover:bg-slate-300 transition-colors"
+                          title="Mark as read"
+                        />
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── DESKTOP LAYOUT (md+) — unchanged ── */}
       <div className="hidden md:block max-w-7xl mx-auto p-6 space-y-6">
@@ -1930,6 +2102,107 @@ export default function SellerDashboardPage() {
         </div>
       </div>
 
+      {/* ── MOBILE ORDER DETAIL OVERLAY ── */}
+      {selectedOrderId && (() => {
+        const order = sellerOrders.find((o) => o.order_id === selectedOrderId);
+        if (!order) return null;
+        const isPaid = order.order_payment_status === "paid";
+        const isCancelled = order.order_status === "cancelled";
+        const totalQty = order.items.reduce((s, i) => s + Math.max(0, Number(i.quantity ?? 0)), 0);
+        const orderDt = new Date(order.order_created_at);
+        const dateStr = orderDt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+        const timeStr = orderDt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden"
+              onClick={() => setSelectedOrderId(null)}
+            />
+            {/* Slide-up panel */}
+            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden bg-white rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+                <div className="w-10 h-1 rounded-full bg-slate-200" />
+              </div>
+              {/* Header */}
+              <div className="px-5 py-3 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-mono text-sm font-black text-slate-900">#{order.order_id.slice(0, 8).toUpperCase()}</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        isPaid ? "bg-emerald-100 text-emerald-700" :
+                        isCancelled ? "bg-rose-100 text-rose-700" :
+                        "bg-amber-100 text-amber-700"
+                      }`}>
+                        {isPaid ? "✓ Paid" : isCancelled ? "Cancelled" : "⏳ Unpaid"}
+                      </span>
+                      {order.order_status && order.order_status !== "cancelled" && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
+                          {order.order_status}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">🕐 {dateStr} · {timeStr}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {order.items.length} product{order.items.length !== 1 ? "s" : ""} · {totalQty} unit{totalQty !== 1 ? "s" : ""} total
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedOrderId(null)}
+                    className="p-2 rounded-xl bg-slate-100 text-slate-500 flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              {/* Items */}
+              <div className="overflow-y-auto flex-1 px-5 py-3 space-y-3">
+                {order.items.map((item, idx) => {
+                  const variantParts = [item.color_name, item.size_label].filter(Boolean);
+                  return (
+                    <div key={item.id ?? idx} className="flex items-start gap-4 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                      {/* Image */}
+                      <div className="w-16 h-16 rounded-xl bg-white border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {item.image_url_snapshot
+                          ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
+                          : <span className="text-2xl">{item.emoji_snapshot ?? "📦"}</span>}
+                      </div>
+                      {/* Details */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 leading-snug">{item.name_snapshot}</p>
+                        {/* Quantity */}
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
+                            Qty&nbsp;{item.quantity}
+                          </span>
+                          {variantParts.map((v, i) => (
+                            <span key={i} className="text-xs text-slate-700 bg-white border border-slate-200 px-2.5 py-1 rounded-lg font-medium">
+                              {v}
+                            </span>
+                          ))}
+                        </div>
+                        {/* Notes if any */}
+                        {!item.color_name && !item.size_label && (
+                          <p className="text-[10px] text-slate-400 mt-1">No variants</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 bg-slate-50">
+                <p className="text-xs text-slate-500 text-center">
+                  {isPaid ? "✅ Payment confirmed" : "⏳ Waiting for payment confirmation"}
+                </p>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {/* ── MOBILE LAYOUT (below md) ── */}
       <div className="md:hidden pb-24">
 
@@ -1986,7 +2259,7 @@ export default function SellerDashboardPage() {
                     Recent Orders
                   </h3>
                   <button
-                    onClick={() => setActiveTab("orders")}
+                    onClick={() => switchTab("orders")}
                     className="text-xs font-semibold text-lime-600"
                   >
                     See all →
@@ -2082,7 +2355,11 @@ export default function SellerDashboardPage() {
                 const dateStr = orderDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                 const timeStr = orderDt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
                 return (
-                  <div key={order.order_id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                  <div
+                    key={order.order_id}
+                    className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                    onClick={() => setSelectedOrderId(order.order_id)}
+                  >
                     {/* Header */}
                     <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
                       <div className="flex items-center justify-between mb-1.5">
@@ -2110,16 +2387,13 @@ export default function SellerDashboardPage() {
                       </p>
                     </div>
 
-                    {/* Item rows */}
+                    {/* Item preview (first 2 items) */}
                     <div className="divide-y divide-slate-50">
-                      {order.items.map((item) => {
-                        const variantParts = [
-                          item.color_name,
-                          item.size_label,
-                        ].filter(Boolean);
+                      {order.items.slice(0, 2).map((item) => {
+                        const variantParts = [item.color_name, item.size_label].filter(Boolean);
                         return (
-                          <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-base">
+                          <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
                               {item.image_url_snapshot
                                 ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
                                 : item.emoji_snapshot ?? "📦"}
@@ -2127,19 +2401,22 @@ export default function SellerDashboardPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-slate-900 truncate">{item.name_snapshot}</p>
                               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">
-                                  Qty {item.quantity}
-                                </span>
+                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md">Qty {item.quantity}</span>
                                 {variantParts.map((v, i) => (
-                                  <span key={i} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                                    {v}
-                                  </span>
+                                  <span key={i} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">{v}</span>
                                 ))}
                               </div>
                             </div>
                           </div>
                         );
                       })}
+                    </div>
+                    {/* Tap hint */}
+                    <div className="px-4 py-2 border-t border-slate-50 bg-slate-50 flex items-center justify-between">
+                      <p className="text-[10px] text-slate-400">
+                        {order.items.length > 2 ? `+${order.items.length - 2} more item${order.items.length - 2 !== 1 ? "s" : ""}` : ""}
+                      </p>
+                      <p className="text-[10px] font-semibold text-indigo-500">Tap for full details →</p>
                     </div>
                   </div>
                 );
@@ -2538,7 +2815,7 @@ export default function SellerDashboardPage() {
         <div className="flex items-end justify-around max-w-sm mx-auto">
           {/* Home */}
           <button
-            onClick={() => setActiveTab("home")}
+            onClick={() => switchTab("home")}
             className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "home" ? "text-lime-600" : "text-slate-400"}`}
           >
             <Home className="w-5 h-5" />
@@ -2546,7 +2823,7 @@ export default function SellerDashboardPage() {
           </button>
           {/* Orders */}
           <button
-            onClick={() => setActiveTab("orders")}
+            onClick={() => switchTab("orders")}
             className={`relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "orders" ? "text-lime-600" : "text-slate-400"}`}
           >
             <ShoppingBag className="w-5 h-5" />
@@ -2569,7 +2846,7 @@ export default function SellerDashboardPage() {
           </button>
           {/* Stock */}
           <button
-            onClick={() => setActiveTab("stock")}
+            onClick={() => switchTab("stock")}
             className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "stock" ? "text-lime-600" : "text-slate-400"}`}
           >
             <Box className="w-5 h-5" />
@@ -2577,7 +2854,7 @@ export default function SellerDashboardPage() {
           </button>
           {/* More */}
           <button
-            onClick={() => setActiveTab("more")}
+            onClick={() => switchTab("more")}
             className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "more" ? "text-lime-600" : "text-slate-400"}`}
           >
             <MoreHorizontal className="w-5 h-5" />
