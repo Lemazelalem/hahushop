@@ -117,6 +117,29 @@ export default function AdminPublicEmployeePage() {
       (profs ?? []).forEach((p: ProfileMini) => {
         map[p.id] = p;
       });
+
+      // For users with no name in profiles, fall back to auth.users metadata via admin API
+      const unnamed = userIds.filter(
+        (id) => !map[id]?.display_name && !map[id]?.full_name
+      );
+      if (unnamed.length > 0) {
+        try {
+          const res = await fetch(
+            `/api/admin/user-names?ids=${unnamed.join(",")}`
+          );
+          if (res.ok) {
+            const { names } = await res.json();
+            for (const id of unnamed) {
+              if (names[id]) {
+                map[id] = { ...(map[id] ?? { id, phone: null, gov_employee_status: null, display_name: null, full_name: null }), full_name: names[id] };
+              }
+            }
+          }
+        } catch {
+          // best-effort — silently ignore if auth metadata fetch fails
+        }
+      }
+
       setProfilesById(map);
     }
 
