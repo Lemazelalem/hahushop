@@ -5,7 +5,7 @@ import { FormEvent, Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { syncProfileFromAuthUser } from "@/lib/authProfile";
-import { Store, User, ArrowLeft, CheckCircle } from "lucide-react";
+import { Store, User, ArrowLeft, CheckCircle, Eye, EyeOff } from "lucide-react";
 
 type SignupRole = "customer" | "seller";
 
@@ -33,6 +33,8 @@ function SignupPageContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // If user is already logged in and wants to sell, redirect to verification
   useEffect(() => {
@@ -592,19 +594,30 @@ function SignupPageContent() {
               <label className="block text-sm font-semibold text-slate-800 mb-1.5">
                 Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                disabled={loading}
-                className={`w-full rounded-2xl border bg-white/70 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all focus:bg-white/90 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  fieldErrors.password
-                    ? "border-red-400 focus:border-red-400 focus:ring-red-200"
-                    : "border-white/60 focus:border-cyan-400 focus:ring-cyan-200"
-                }`}
-                placeholder="At least 6 characters"
-                value={formData.password}
-                onChange={(e) => updateField("password", e.target.value)}
-                onBlur={validateForm}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  disabled={loading}
+                  className={`w-full rounded-2xl border bg-white/70 px-4 py-2.5 pr-11 text-sm text-slate-900 outline-none transition-all focus:bg-white/90 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    fieldErrors.password
+                      ? "border-red-400 focus:border-red-400 focus:ring-red-200"
+                      : "border-white/60 focus:border-cyan-400 focus:ring-cyan-200"
+                  }`}
+                  placeholder="At least 6 characters"
+                  value={formData.password}
+                  onChange={(e) => updateField("password", e.target.value)}
+                  onBlur={validateForm}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {fieldErrors.password && (
                 <p className="mt-1 text-xs text-red-600 font-medium">
                   {fieldErrors.password}
@@ -619,19 +632,30 @@ function SignupPageContent() {
               <label className="block text-sm font-semibold text-slate-800 mb-1.5">
                 Confirm Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                disabled={loading}
-                className={`w-full rounded-2xl border bg-white/70 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all focus:bg-white/90 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  fieldErrors.confirmPassword
-                    ? "border-red-400 focus:border-red-400 focus:ring-red-200"
-                    : "border-white/60 focus:border-cyan-400 focus:ring-cyan-200"
-                }`}
-                placeholder="Re-enter your password"
-                value={formData.confirmPassword}
-                onChange={(e) => updateField("confirmPassword", e.target.value)}
-                onBlur={validateForm}
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  disabled={loading}
+                  className={`w-full rounded-2xl border bg-white/70 px-4 py-2.5 pr-11 text-sm text-slate-900 outline-none transition-all focus:bg-white/90 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    fieldErrors.confirmPassword
+                      ? "border-red-400 focus:border-red-400 focus:ring-red-200"
+                      : "border-white/60 focus:border-cyan-400 focus:ring-cyan-200"
+                  }`}
+                  placeholder="Re-enter your password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => updateField("confirmPassword", e.target.value)}
+                  onBlur={validateForm}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {fieldErrors.confirmPassword && (
                 <p className="mt-1 text-xs text-red-600 font-medium">
                   {fieldErrors.confirmPassword}
