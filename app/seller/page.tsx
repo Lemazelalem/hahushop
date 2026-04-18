@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Bell,
@@ -32,6 +32,7 @@ import {
   Save,
   X,
   ShoppingBag,
+  Send,
 } from "lucide-react";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
@@ -155,8 +156,10 @@ type SellerProfileForm = {
 
 export default function SellerDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
+  const [createdBanner, setCreatedBanner] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
@@ -568,6 +571,24 @@ export default function SellerDashboardPage() {
     const saved = sessionStorage.getItem("sellerActiveTab");
     if (saved) setActiveTab(saved as any);
   }, []);
+
+  // Handle ?success=product_created redirect — show banner & switch to More tab
+  useEffect(() => {
+    if (searchParams.get("success") === "product_created") {
+      setCreatedBanner(true);
+      setActiveTab("more");
+      setStatusFilter("draft");
+      sessionStorage.setItem("sellerActiveTab", "more");
+      // clean up URL
+      window.history.replaceState(null, "", "/seller");
+      setTimeout(() => setCreatedBanner(false), 6000);
+    }
+  }, [searchParams]);
+
+  const draftProducts = useMemo(
+    () => products.filter((p) => p.status === "draft"),
+    [products]
+  );
 
   const switchTab = (tab: "home" | "orders" | "stock" | "more") => {
     setActiveTab(tab);
@@ -1119,6 +1140,21 @@ export default function SellerDashboardPage() {
 
       {/* ── DESKTOP LAYOUT (md+) — unchanged ── */}
       <div className="hidden md:block max-w-7xl mx-auto p-6 space-y-6">
+
+        {/* Product created success banner (desktop) */}
+        {createdBanner && (
+          <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/80 p-5 flex items-center gap-4">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-base font-bold text-emerald-800">Draft product created!</p>
+              <p className="text-sm text-emerald-600 mt-0.5">Find it in "My Products" below, then click to review and submit for admin approval.</p>
+            </div>
+            <button onClick={() => setCreatedBanner(false)} className="text-emerald-400 hover:text-emerald-600 transition-colors p-1">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         {/* Welcome + Quick Stats (compact on mobile) */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -1495,6 +1531,52 @@ export default function SellerDashboardPage() {
         )}
 
         {/* Edit Seller Information (includes bank details once added) */}
+        {/* Draft products requiring submission (desktop) */}
+        {draftProducts.length > 0 && (
+          <section className="glass-card rounded-2xl p-4 md:p-5 border border-sky-200/70 bg-gradient-to-r from-sky-50/70 to-white/80">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5 text-sky-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    {draftProducts.length} draft{draftProducts.length > 1 ? "s" : ""} ready to submit
+                  </p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Review and submit your drafts for admin approval to go live.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {draftProducts.slice(0, 5).map((product) => (
+                <div
+                  key={product.id}
+                  className="group flex items-center gap-4 p-3 rounded-xl bg-white/60 hover:bg-white/80 border border-slate-200/40 hover:border-sky-300/50 transition-all cursor-pointer"
+                  onClick={() => router.push(`/seller/products/${product.id}`)}
+                >
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xl">{product.emoji || "📦"}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900 truncate">{product.name}</p>
+                    <p className="text-xs text-slate-500">{formatRelativeTime(product.created_at)}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-white text-xs font-bold group-hover:bg-sky-600 transition-colors">
+                    <Send className="w-3.5 h-3.5" />
+                    Review & Submit
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="glass-card rounded-2xl p-4 md:p-5">
           <button
             onClick={() => setShowEditInfo((prev) => !prev)}
@@ -2211,6 +2293,69 @@ export default function SellerDashboardPage() {
           <div className="p-4 space-y-4">
             {renderVerificationCard()}
 
+            {/* Bank info missing alert */}
+            {!hasBankInfo && (
+              <div className="rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/70 to-white/80 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-4.5 h-4.5 text-amber-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900">Add your bank information</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Required to receive Ethiopian bank payouts.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { switchTab("more"); setTimeout(() => setShowEditInfo(true), 150); }}
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+                >
+                  <Wallet className="w-4 h-4" />
+                  Add Bank Details
+                </button>
+              </div>
+            )}
+
+            {/* Draft products ready to submit */}
+            {draftProducts.length > 0 && (
+              <div className="rounded-2xl border border-sky-200/60 bg-gradient-to-r from-sky-50/70 to-white/80 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-sky-600" />
+                    Drafts to Submit
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">{draftProducts.length}</span>
+                  </h3>
+                  <button
+                    onClick={() => { switchTab("more"); setStatusFilter("draft"); }}
+                    className="text-xs font-semibold text-sky-600"
+                  >
+                    View all →
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {draftProducts.slice(0, 3).map((product) => (
+                    <div
+                      key={product.id}
+                      onClick={() => router.push(`/seller/products/${product.id}`)}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40 active:bg-slate-50"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {product.image_url ? (
+                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-lg">{product.emoji || "📦"}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{product.name}</p>
+                        <p className="text-[10px] text-sky-600 font-semibold">Tap to review & submit for approval →</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Earnings row */}
             <div className="grid grid-cols-2 gap-3">
               <div className="glass-morphism rounded-2xl p-4 border-l-4 border-amber-400">
@@ -2565,6 +2710,19 @@ export default function SellerDashboardPage() {
         {/* ── More Tab ── */}
         {activeTab === "more" && (
           <div className="p-4 space-y-4">
+            {/* Product created success banner */}
+            {createdBanner && (
+              <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/80 p-4 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-emerald-800">Draft created!</p>
+                  <p className="text-xs text-emerald-600 mt-0.5">Tap your draft below to review and submit it for admin approval.</p>
+                </div>
+                <button onClick={() => setCreatedBanner(false)} className="text-emerald-400 hover:text-emerald-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             {/* Products list */}
             <div className="glass-card rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
