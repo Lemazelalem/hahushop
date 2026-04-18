@@ -40,6 +40,7 @@ type PEDocumentRow = {
 
 type ProfileMini = {
   id: string;
+  display_name: string | null;
   full_name: string | null;
   phone: string | null;
   email?: string | null;
@@ -109,7 +110,7 @@ export default function AdminPublicEmployeePage() {
     if (userIds.length > 0) {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id, full_name, phone, gov_employee_status")
+        .select("id, display_name, full_name, phone, gov_employee_status")
         .in("id", userIds);
 
       const map: Record<string, ProfileMini> = {};
@@ -482,7 +483,7 @@ export default function AdminPublicEmployeePage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-900 truncate">
-                            {profile?.full_name || "Unknown User"}
+                            {profile?.display_name || profile?.full_name || "Unknown User"}
                           </span>
                           <span
                             className={[
