@@ -33,6 +33,8 @@ import {
   X,
   ShoppingBag,
   Send,
+  Trash2,
+  ArrowLeft,
 } from "lucide-react";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
@@ -678,7 +680,10 @@ export default function SellerDashboardPage() {
     return products
       .filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+        // In "all" view, hide archived products (they're considered removed)
+        const matchesStatus = statusFilter === "all"
+          ? p.status !== "archived"
+          : p.status === statusFilter;
         return matchesSearch && matchesStatus;
       })
       .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
@@ -809,6 +814,18 @@ export default function SellerDashboardPage() {
       },
     };
     return configs[status] || configs.draft;
+  };
+
+  const deleteDraft = async (productId: string) => {
+    if (!window.confirm("Delete this draft? This cannot be undone.")) return;
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", productId)
+      .eq("status", "draft");
+    if (!error) {
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+    }
   };
 
   const saveBankInfo = async () => {
@@ -1552,21 +1569,36 @@ export default function SellerDashboardPage() {
               {draftProducts.slice(0, 5).map((product) => (
                 <div
                   key={product.id}
-                  className="group flex items-center gap-4 p-3 rounded-xl bg-white/60 hover:bg-white/80 border border-slate-200/40 hover:border-sky-300/50 transition-all cursor-pointer"
-                  onClick={() => router.push(`/seller/products/${product.id}`)}
+                  className="group flex items-center gap-4 p-3 rounded-xl bg-white/60 hover:bg-white/80 border border-slate-200/40 hover:border-sky-300/50 transition-all"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <div
+                    className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer"
+                    onClick={() => router.push(`/seller/products/${product.id}`)}
+                  >
                     {product.image_url ? (
                       <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-xl">{product.emoji || "📦"}</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => router.push(`/seller/products/${product.id}`)}
+                  >
                     <p className="text-sm font-bold text-slate-900 truncate">{product.name}</p>
                     <p className="text-xs text-slate-500">{formatRelativeTime(product.created_at)}</p>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-white text-xs font-bold group-hover:bg-sky-600 transition-colors">
+                  <button
+                    onClick={() => deleteDraft(product.id)}
+                    className="p-2 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors flex-shrink-0"
+                    title="Delete draft"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <span
+                    onClick={() => router.push(`/seller/products/${product.id}`)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-white text-xs font-bold group-hover:bg-sky-600 transition-colors cursor-pointer"
+                  >
                     <Send className="w-3.5 h-3.5" />
                     Review & Submit
                   </span>
@@ -2274,10 +2306,17 @@ export default function SellerDashboardPage() {
                 })}
               </div>
               {/* Footer */}
-              <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 bg-slate-50">
+              <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 bg-slate-50 space-y-2">
                 <p className="text-xs text-slate-500 text-center">
                   {isPaid ? "✅ Payment confirmed" : "⏳ Waiting for payment confirmation"}
                 </p>
+                <button
+                  onClick={() => setSelectedOrderId(null)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-sm font-semibold active:bg-slate-300 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Orders
+                </button>
               </div>
             </div>
           </>
@@ -2297,7 +2336,7 @@ export default function SellerDashboardPage() {
               <div className="rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/70 to-white/80 p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <Wallet className="w-4.5 h-4.5 text-amber-700" />
+                    <Wallet className="w-4 h-4 text-amber-700" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-slate-900">Add your bank information</p>
@@ -2334,21 +2373,36 @@ export default function SellerDashboardPage() {
                   {draftProducts.slice(0, 3).map((product) => (
                     <div
                       key={product.id}
-                      onClick={() => router.push(`/seller/products/${product.id}`)}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40 active:bg-slate-50"
+                      className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <div
+                        onClick={() => router.push(`/seller/products/${product.id}`)}
+                        className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer"
+                      >
                         {product.image_url ? (
                           <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-lg">{product.emoji || "📦"}</span>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div
+                        onClick={() => router.push(`/seller/products/${product.id}`)}
+                        className="flex-1 min-w-0 cursor-pointer"
+                      >
                         <p className="text-sm font-bold text-slate-900 truncate">{product.name}</p>
-                        <p className="text-[10px] text-sky-600 font-semibold">Tap to review & submit for approval →</p>
+                        <p className="text-[10px] text-sky-600 font-semibold">Tap to review & submit →</p>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteDraft(product.id); }}
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors flex-shrink-0"
+                        title="Delete draft"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <ChevronRight
+                        onClick={() => router.push(`/seller/products/${product.id}`)}
+                        className="w-4 h-4 text-slate-300 flex-shrink-0 cursor-pointer"
+                      />
                     </div>
                   ))}
                 </div>
@@ -2769,10 +2823,12 @@ export default function SellerDashboardPage() {
                     return (
                       <div
                         key={product.id}
-                        onClick={() => router.push(`/seller/products/${product.id}`)}
-                        className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40 active:bg-slate-50"
+                        className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40"
                       >
-                        <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        <div
+                          onClick={() => router.push(`/seller/products/${product.id}`)}
+                          className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer"
+                        >
                           {product.image_url ? (
                             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                           ) : (
@@ -2795,7 +2851,19 @@ export default function SellerDashboardPage() {
                             <p className="text-[9px] text-rose-600 font-semibold mt-0.5">Tap to fix &amp; resubmit →</p>
                           )}
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                        {product.status === "draft" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteDraft(product.id); }}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors flex-shrink-0"
+                            title="Delete draft"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <ChevronRight
+                          onClick={() => router.push(`/seller/products/${product.id}`)}
+                          className="w-4 h-4 text-slate-300 flex-shrink-0 cursor-pointer"
+                        />
                       </div>
                     );
                   })}
