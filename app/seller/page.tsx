@@ -31,6 +31,7 @@ import {
   Edit3,
   Save,
   X,
+  ShoppingBag,
 } from "lucide-react";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
@@ -178,6 +179,7 @@ export default function SellerDashboardPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [sellerOrders, setSellerOrders] = useState<SellerOrder[]>([]);
   const [showOrders, setShowOrders] = useState(false);
+  const [activeTab, setActiveTab] = useState<"home" | "orders" | "stock" | "more">("home");
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [salesByDay, setSalesByDay] = useState<SalesByDay[]>([]);
   const [soldTodayTotal, setSoldTodayTotal] = useState(0);
@@ -943,7 +945,8 @@ export default function SellerDashboardPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+      {/* ── DESKTOP LAYOUT (md+) — unchanged ── */}
+      <div className="hidden md:block max-w-7xl mx-auto p-6 space-y-6">
         {/* Welcome + Quick Stats (compact on mobile) */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -1927,6 +1930,560 @@ export default function SellerDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── MOBILE LAYOUT (below md) ── */}
+      <div className="md:hidden pb-24">
+
+        {/* ── Home Tab ── */}
+        {activeTab === "home" && (
+          <div className="p-4 space-y-4">
+            {renderVerificationCard()}
+
+            {/* Earnings row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="glass-morphism rounded-2xl p-4 border-l-4 border-amber-400">
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide">Pending</p>
+                <p className="text-xl font-black text-amber-900 mt-0.5">{formatMoney(payoutTotals.totalPendingCents)}</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">Awaiting payment</p>
+              </div>
+              <div className="glass-morphism rounded-2xl p-4 border-l-4 border-emerald-400">
+                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Total Earned</p>
+                <p className="text-xl font-black text-emerald-900 mt-0.5">{formatMoney(payoutTotals.totalPaidCents)}</p>
+                <p className="text-[10px] text-emerald-600 mt-0.5">Lifetime</p>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="glass-card rounded-xl p-3 text-center">
+                <span className="text-2xl font-black text-slate-900 block">{stats.total}</span>
+                <span className="text-[10px] text-slate-500">Products</span>
+              </div>
+              <div className="glass-card rounded-xl p-3 text-center">
+                <span className="text-2xl font-black text-emerald-700 block">{stats.approved}</span>
+                <span className="text-[10px] text-emerald-600">Live</span>
+              </div>
+              <div className="glass-card rounded-xl p-3 text-center">
+                <span className="text-2xl font-black text-amber-700 block">{soldTodayTotal}</span>
+                <span className="text-[10px] text-amber-600">Sold today</span>
+              </div>
+            </div>
+
+            {/* Add Product CTA */}
+            <button
+              onClick={() => router.push("/seller/products/new")}
+              className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-r from-lime-500 to-emerald-500 text-white font-bold text-base shadow-lg active:scale-[0.98] transition-transform"
+            >
+              <Plus className="w-5 h-5" />
+              List a New Product
+            </button>
+
+            {/* Recent orders mini preview */}
+            {sellerOrders.length > 0 && (
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <ShoppingBag className="w-4 h-4 text-indigo-500" />
+                    Recent Orders
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab("orders")}
+                    className="text-xs font-semibold text-lime-600"
+                  >
+                    See all →
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {sellerOrders.slice(0, 3).map((order) => {
+                    const isPaid = order.order_payment_status === "paid";
+                    const shortId = order.order_id.slice(0, 8).toUpperCase();
+                    return (
+                      <div key={order.order_id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-600">#{shortId}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                            {isPaid ? "Paid" : "Unpaid"}
+                          </span>
+                        </div>
+                        <span className="text-sm font-black text-slate-900">
+                          ETB {(order.seller_total_cents / 100).toFixed(0)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Orders Tab ── */}
+        {activeTab === "orders" && (
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingBag className="w-4 h-4 text-indigo-500" />
+              <h2 className="font-bold text-slate-900">My Orders</h2>
+              {sellerOrders.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{sellerOrders.length}</span>
+              )}
+            </div>
+            {sellerOrders.length === 0 ? (
+              <div className="text-center py-16">
+                <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">No orders yet.</p>
+                <p className="text-slate-400 text-xs mt-1">Orders appear here when customers buy your products.</p>
+              </div>
+            ) : (
+              sellerOrders.map((order) => {
+                const shortId = order.order_id.slice(0, 8).toUpperCase();
+                const isPaid = order.order_payment_status === "paid";
+                const isCancelled = order.order_status === "cancelled";
+                return (
+                  <div key={order.order_id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-slate-700">#{shortId}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isPaid ? "bg-emerald-100 text-emerald-700" :
+                          isCancelled ? "bg-rose-100 text-rose-700" :
+                          "bg-amber-100 text-amber-700"
+                        }`}>
+                          {isPaid ? "Paid" : isCancelled ? "Cancelled" : "Unpaid"}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-black text-slate-900">ETB {(order.seller_total_cents / 100).toFixed(0)}</div>
+                        <div className="text-[10px] text-slate-400">
+                          {new Date(order.order_created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-4 py-2.5 space-y-2">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center text-sm">
+                            {item.image_url_snapshot
+                              ? <img src={item.image_url_snapshot} alt={item.name_snapshot} className="w-full h-full object-cover" />
+                              : item.emoji_snapshot ?? "📦"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 truncate">{item.name_snapshot}</p>
+                            <p className="text-[10px] text-slate-400">
+                              Qty {item.quantity}{item.size_label ? ` · ${item.size_label}` : ""}
+                            </p>
+                          </div>
+                          <div className="text-xs font-bold text-slate-700">ETB {((item.line_total_cents ?? 0) / 100).toFixed(0)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {order.shipping_full_name && (
+                      <div className="px-4 py-2 border-t border-slate-100 text-[10px] text-slate-500">
+                        📍 {order.shipping_full_name} · {order.shipping_city} · {order.shipping_phone}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* ── Stock Tab ── */}
+        {activeTab === "stock" && (
+          <div className="p-4 space-y-4">
+            {/* 7-day chart */}
+            <div className="glass-card rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-4 h-4 text-lime-600" />
+                <h2 className="font-bold text-slate-900 text-sm">Sales — Last 7 Days</h2>
+                <span className="ml-auto px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                  {soldTodayTotal} today
+                </span>
+              </div>
+              <div className="flex items-end gap-1.5 h-20">
+                {salesByDay.map((d, idx) => {
+                  const maxUnits = Math.max(...salesByDay.map((x) => x.units), 1);
+                  const h = Math.max(6, Math.round((d.units / maxUnits) * 72));
+                  const isToday = idx === salesByDay.length - 1;
+                  return (
+                    <div key={d.dateKey} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[9px] font-semibold text-slate-500">{d.units || ""}</span>
+                      <div
+                        className={`w-full rounded-t-md ${isToday ? "bg-lime-500" : "bg-lime-200"}`}
+                        style={{ height: `${h}px` }}
+                      />
+                      <span className="text-[9px] text-slate-400">{d.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Stock watch */}
+            <div className="glass-card rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Box className="w-4 h-4 text-emerald-600" />
+                <h2 className="font-bold text-slate-900 text-sm">Stock Watch</h2>
+              </div>
+              {stockRows.length === 0 ? (
+                <p className="text-sm text-slate-500 py-4 text-center">No products yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {stockRows.map((row) => {
+                    const isEditing = editingStockId === row.productId;
+                    const product = products.find((p) => p.id === row.productId);
+                    const isVariant = Array.isArray(product?.size_variants) && (product?.size_variants?.length ?? 0) > 0;
+                    return (
+                      <div key={row.productId} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{row.productName}</p>
+                            <p className="text-[10px] text-slate-400">Sold today: {row.soldToday}</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <div className="text-right">
+                              <p className={`text-sm font-bold ${
+                                row.level === "out" ? "text-rose-700" :
+                                row.level === "low" ? "text-amber-700" :
+                                row.level === "unknown" ? "text-slate-400" :
+                                "text-emerald-700"
+                              }`}>
+                                {row.liveStock === null ? "—" : `${row.liveStock}`}
+                              </p>
+                              <p className="text-[9px] text-slate-400 uppercase">
+                                {row.level === "out" ? "Out" : row.level === "low" ? "Low" : row.level === "unknown" ? "?" : "OK"}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => isEditing ? setEditingStockId(null) : handleStartEditStock(row.productId)}
+                              className="p-1.5 rounded-lg bg-slate-100 text-slate-500 active:bg-slate-200"
+                            >
+                              {isEditing ? <X className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                        {isEditing && stockDraft && (
+                          <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
+                            {isVariant ? (
+                              <div className="space-y-2">
+                                {stockDraft.variants.map((v, i) => (
+                                  <div key={v.id} className="flex items-center gap-2">
+                                    <span className="text-xs text-slate-600 w-20 truncate">{v.label}</span>
+                                    <input
+                                      type="number" min="0" value={v.stock}
+                                      onChange={(e) => setStockDraft((prev) => {
+                                        if (!prev) return prev;
+                                        const updated = [...prev.variants];
+                                        updated[i] = { ...updated[i], stock: e.target.value };
+                                        return { ...prev, variants: updated };
+                                      })}
+                                      className="w-20 text-sm border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-600">Stock</span>
+                                <input
+                                  type="number" min="0" value={stockDraft.simpleQty}
+                                  onChange={(e) => setStockDraft((prev) => prev ? { ...prev, simpleQty: e.target.value } : prev)}
+                                  className="w-24 text-sm border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                />
+                                <span className="text-xs text-slate-400">units</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 mt-3">
+                              <button
+                                onClick={() => handleSaveStock(row.productId)}
+                                disabled={stockSaving}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+                              >
+                                <Save className="w-3 h-3" />
+                                {stockSaving ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                onClick={() => { setEditingStockId(null); setStockSaveMsg(null); }}
+                                className="px-3 py-1.5 text-xs text-slate-600 rounded-lg bg-slate-200"
+                              >
+                                Cancel
+                              </button>
+                              {stockSaveMsg && (
+                                <span className={`text-xs font-medium ${stockSaveMsg.startsWith("Error") ? "text-rose-600" : "text-emerald-600"}`}>
+                                  {stockSaveMsg}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── More Tab ── */}
+        {activeTab === "more" && (
+          <div className="p-4 space-y-4">
+            {/* Products list */}
+            <div className="glass-card rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <Package className="w-4 h-4 text-lime-600" />
+                  My Products
+                  <span className="text-xs font-normal text-slate-400">({stats.total})</span>
+                </h2>
+                <button
+                  onClick={() => router.push("/seller/products/new")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lime-500 text-white text-xs font-semibold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add
+                </button>
+              </div>
+              {/* Status filter (compact) */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
+                {[
+                  { key: "all", label: "All", count: stats.total },
+                  { key: "approved", label: "Live", count: stats.approved },
+                  { key: "submitted", label: "Pending", count: stats.submitted },
+                  { key: "draft", label: "Draft", count: stats.draft },
+                  { key: "rejected", label: "Rejected", count: stats.rejected },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setStatusFilter(t.key as any)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                      statusFilter === t.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {t.label}
+                    <span className={`text-[9px] px-1 rounded-full ${statusFilter === t.key ? "bg-white/20" : "bg-white"}`}>{t.count}</span>
+                  </button>
+                ))}
+              </div>
+              {filteredProducts.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">No products found.</p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredProducts.map((product) => {
+                    const cfg = getStatusConfig(product.status);
+                    const StatusIcon = cfg.icon;
+                    return (
+                      <div
+                        key={product.id}
+                        onClick={() => router.push(`/seller/products/${product.id}`)}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-white/60 border border-slate-200/40 active:bg-slate-50"
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xl">{product.emoji || "📦"}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate">{product.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${cfg.bg} ${cfg.color}`}>
+                              <StatusIcon className="w-2.5 h-2.5" />
+                              {product.status}
+                            </span>
+                            <span className="text-[10px] text-slate-400">{formatMoney(product.seller_price_cents)}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Edit Info */}
+            <section className="glass-card rounded-2xl p-4">
+              <button
+                onClick={() => setShowEditInfo((prev) => !prev)}
+                className="w-full flex items-center justify-between"
+              >
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-slate-400" />
+                  Edit Your Information
+                </h3>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showEditInfo ? "rotate-180" : ""}`} />
+              </button>
+              {showEditInfo && (
+                <div className="mt-4 pt-4 border-t border-slate-200/70 space-y-3">
+                  <input type="text" value={profileForm.displayName}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, displayName: e.target.value }))}
+                    placeholder="Store Display Name"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={profileForm.fullName}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                    placeholder="Full Name"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={profileForm.phone}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Phone (+251...)"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={profileForm.city}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, city: e.target.value }))}
+                    placeholder="City"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <input type="text" value={profileForm.subcity}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, subcity: e.target.value }))}
+                    placeholder="Subcity / Area"
+                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                  />
+                  <button
+                    onClick={saveSellerInfo}
+                    disabled={infoSaving}
+                    className="w-full py-2.5 rounded-xl bg-lime-500 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {infoSaving ? "Saving..." : "Save Information"}
+                  </button>
+                  {infoSaveMsg && <p className="text-xs text-slate-600 text-center">{infoSaveMsg}</p>}
+                </div>
+              )}
+            </section>
+
+            {/* Bank info banner */}
+            {!hasBankInfo && (
+              <section className="glass-card rounded-2xl p-4 border border-amber-200/70 bg-amber-50/40">
+                <button
+                  onClick={() => setShowBankBannerForm((prev) => !prev)}
+                  className="w-full flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm font-semibold text-slate-900">Add Bank Info</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showBankBannerForm ? "rotate-180" : ""}`} />
+                </button>
+                {showBankBannerForm && (
+                  <div className="mt-3 pt-3 border-t border-amber-200/70 space-y-3">
+                    <input type="text" value={bankForm.bankName}
+                      onChange={(e) => setBankForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                      placeholder="Bank Name (e.g. CBE)"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                    <input type="text" value={bankForm.accountHolder}
+                      onChange={(e) => setBankForm((prev) => ({ ...prev, accountHolder: e.target.value }))}
+                      placeholder="Account Holder Name"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                    <input type="text" value={bankForm.accountNumber}
+                      onChange={(e) => setBankForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                      placeholder="Account Number"
+                      className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-500/40"
+                    />
+                    <button
+                      onClick={saveBankInfo}
+                      disabled={bankSaving}
+                      className="w-full py-2.5 rounded-xl bg-lime-500 text-white text-sm font-semibold disabled:opacity-60"
+                    >
+                      {bankSaving ? "Saving..." : "Save Bank Details"}
+                    </button>
+                    {bankSaveMsg && <p className="text-xs text-slate-600">{bankSaveMsg}</p>}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Quick links + sign out */}
+            <div className="glass-card rounded-2xl p-4">
+              <h3 className="font-semibold text-slate-900 text-sm mb-3">Quick Links</h3>
+              <div className="space-y-1">
+                {[
+                  { label: "Verification", icon: FileText, path: "/seller/verification" },
+                  { label: "Payout History", icon: Wallet, path: "/seller/payouts" },
+                  { label: "Settings", icon: Settings, path: "/seller/settings" },
+                ].map((link) => (
+                  <button
+                    key={link.path}
+                    onClick={() => router.push(link.path)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <link.icon className="w-4 h-4 text-slate-400" />
+                      <span className="text-sm text-slate-700">{link.label}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                  </button>
+                ))}
+                <button
+                  onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-rose-50 transition-colors text-rose-600"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* ── MOBILE BOTTOM NAV BAR ── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/60 px-1 pt-1 pb-2">
+        <div className="flex items-end justify-around max-w-sm mx-auto">
+          {/* Home */}
+          <button
+            onClick={() => setActiveTab("home")}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "home" ? "text-lime-600" : "text-slate-400"}`}
+          >
+            <Home className="w-5 h-5" />
+            <span className="text-[9px] font-semibold">Home</span>
+          </button>
+          {/* Orders */}
+          <button
+            onClick={() => setActiveTab("orders")}
+            className={`relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "orders" ? "text-lime-600" : "text-slate-400"}`}
+          >
+            <ShoppingBag className="w-5 h-5" />
+            {sellerOrders.length > 0 && (
+              <span className="absolute -top-0.5 right-1 w-4 h-4 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center">
+                {sellerOrders.length > 9 ? "9+" : sellerOrders.length}
+              </span>
+            )}
+            <span className="text-[9px] font-semibold">Orders</span>
+          </button>
+          {/* + Add (center CTA) */}
+          <button
+            onClick={() => router.push("/seller/products/new")}
+            className="flex flex-col items-center gap-0.5 -mt-4 mb-0.5"
+          >
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-lime-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-lime-500/30 active:scale-95 transition-transform">
+              <Plus className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-[9px] font-semibold text-slate-400">Add</span>
+          </button>
+          {/* Stock */}
+          <button
+            onClick={() => setActiveTab("stock")}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "stock" ? "text-lime-600" : "text-slate-400"}`}
+          >
+            <Box className="w-5 h-5" />
+            <span className="text-[9px] font-semibold">Stock</span>
+          </button>
+          {/* More */}
+          <button
+            onClick={() => setActiveTab("more")}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === "more" ? "text-lime-600" : "text-slate-400"}`}
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[9px] font-semibold">More</span>
+          </button>
+        </div>
+      </nav>
     </main>
   );
 }
