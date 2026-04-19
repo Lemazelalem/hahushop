@@ -460,7 +460,7 @@ export default function HeroAdminPage() {
           <button
             type="button"
             onClick={() => router.push("/admin")}
-            className="hidden md:inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
+            className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
           >
             ← Back to admin
           </button>
