@@ -49,14 +49,14 @@ type ProductRow = {
 type SellerProfile = {
   id: string;
   role: string | null;
-  full_name: string | null;
+  display_name: string | null;
   business_org_name: string | null;
 };
 
 type SellerSummary = {
   seller_id: string;
   role: string | null;
-  full_name: string | null;
+  display_name: string | null;
   submittedCount: number;
   lastSubmittedAt: string;
 };
@@ -184,7 +184,7 @@ export default function AdminApprovalsPage() {
 
         const { data: profData, error: profErr } = await supabase
           .from("profiles")
-          .select("id, role, full_name, business_org_name")
+          .select("id, role, display_name, business_org_name")
           .in("id", sellerIds);
 
         if (!alive) return;
@@ -215,7 +215,7 @@ export default function AdminApprovalsPage() {
       if (!sid) continue;
       const prof = profilesById[sid];
       if (!bySeller[sid]) {
-        bySeller[sid] = { seller_id: sid, role: prof?.role ?? null, full_name: prof?.full_name ?? null, submittedCount: 1, lastSubmittedAt: p.created_at };
+        bySeller[sid] = { seller_id: sid, role: prof?.role ?? null, display_name: prof?.display_name ?? null, submittedCount: 1, lastSubmittedAt: p.created_at };
       } else {
         bySeller[sid].submittedCount += 1;
         if (new Date(p.created_at).getTime() > new Date(bySeller[sid].lastSubmittedAt).getTime())
@@ -354,7 +354,7 @@ export default function AdminApprovalsPage() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold truncate">
-                            {s.full_name ?? s.seller_id.slice(0, 12) + "…"}
+                            {s.display_name ?? s.seller_id.slice(0, 12) + "…"}
                           </div>
                           <div className={`text-[10px] ${isActive ? "text-white/70" : "text-slate-500"}`}>
                             {s.submittedCount} product{s.submittedCount !== 1 ? "s" : ""}
@@ -426,7 +426,7 @@ export default function AdminApprovalsPage() {
                           {sizeVariants.length > 0 && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-semibold text-sky-700">{sizeVariants.length} sizes</span>}
                         </div>
                         <div className="font-bold text-slate-900 truncate">{p.name}</div>
-                        <div className="text-[11px] text-slate-500">{seller?.full_name ?? p.seller_id.slice(0, 8)} · {formatDate(p.created_at)}</div>
+                        <div className="text-[11px] text-slate-500">{seller?.display_name ?? p.seller_id.slice(0, 8)} · {formatDate(p.created_at)}</div>
                       </div>
                       <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
@@ -441,7 +441,7 @@ export default function AdminApprovalsPage() {
                             <Store className="w-3 h-3" />Seller Information
                           </div>
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <div><span className="text-slate-400">Name:</span> <span className="font-semibold text-slate-800">{seller?.full_name ?? "—"}</span></div>
+                            <div><span className="text-slate-400">Name:</span> <span className="font-semibold text-slate-800">{seller?.display_name ?? "—"}</span></div>
                             <div><span className="text-slate-400">Role:</span> <span className={`font-semibold ${isSellerRole ? "text-emerald-700" : "text-amber-700"}`}>{seller?.role ?? "—"}</span></div>
                             <div><span className="text-slate-400">Org:</span> <span className="font-semibold text-slate-800">{seller?.business_org_name ?? "—"}</span></div>
                             <div className="col-span-2"><span className="text-slate-400">ID:</span> <span className="font-mono text-[10px] text-slate-600">{p.seller_id}</span></div>
