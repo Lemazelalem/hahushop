@@ -50,7 +50,6 @@ type SellerProfile = {
   id: string;
   role: string | null;
   full_name: string | null;
-  email: string | null;
   business_org_name: string | null;
 };
 
@@ -185,7 +184,7 @@ export default function AdminApprovalsPage() {
 
         const { data: profData, error: profErr } = await supabase
           .from("profiles")
-          .select("id, role, full_name, email, business_org_name")
+          .select("id, role, full_name, business_org_name")
           .in("id", sellerIds);
 
         if (!alive) return;
@@ -443,7 +442,6 @@ export default function AdminApprovalsPage() {
                           </div>
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                             <div><span className="text-slate-400">Name:</span> <span className="font-semibold text-slate-800">{seller?.full_name ?? "—"}</span></div>
-                            <div><span className="text-slate-400">Email:</span> <span className="font-semibold text-slate-800">{seller?.email ?? "—"}</span></div>
                             <div><span className="text-slate-400">Role:</span> <span className={`font-semibold ${isSellerRole ? "text-emerald-700" : "text-amber-700"}`}>{seller?.role ?? "—"}</span></div>
                             <div><span className="text-slate-400">Org:</span> <span className="font-semibold text-slate-800">{seller?.business_org_name ?? "—"}</span></div>
                             <div className="col-span-2"><span className="text-slate-400">ID:</span> <span className="font-mono text-[10px] text-slate-600">{p.seller_id}</span></div>
