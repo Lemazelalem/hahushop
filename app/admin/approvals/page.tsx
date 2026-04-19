@@ -192,6 +192,24 @@ export default function AdminApprovalsPage() {
 
         const map: Record<string, SellerProfile> = {};
         for (const row of (profData ?? []) as SellerProfile[]) map[row.id] = row;
+
+        // Fetch real names from auth.users for any seller missing a display_name
+        try {
+          const missingIds = sellerIds.filter((id) => !map[id]?.display_name);
+          const idsToFetch = missingIds.length > 0 ? sellerIds : sellerIds; // fetch all for completeness
+          const res = await fetch(`/api/admin/user-names?ids=${idsToFetch.join(",")}`);
+          if (res.ok) {
+            const { names } = await res.json() as { names: Record<string, string> };
+            for (const [id, name] of Object.entries(names)) {
+              if (map[id]) {
+                map[id] = { ...map[id], display_name: map[id].display_name || name };
+              } else {
+                map[id] = { id, role: null, display_name: name, business_org_name: null };
+              }
+            }
+          }
+        } catch {}
+
         setProfilesById(map);
       } catch (e: any) {
         console.error("[admin approvals] load error:", e);
