@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  Menu, X, ChevronRight, LogOut, Shield,
+  Package, ShoppingBag, Users, DollarSign,
+  BarChart2, Tag, RotateCcw, FileText, Store, List,
+} from "lucide-react";
 
 type ProductStatus =
   | "draft"
@@ -53,6 +58,7 @@ export default function AdminDashboard() {
 
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [totalProducts, setTotalProducts] = useState(0);
   const [submitted, setSubmitted] = useState(0);
@@ -402,11 +408,171 @@ export default function AdminDashboard() {
   // ------------------------------
   return (
     <main className="py-4 md:py-6 space-y-6">
+
+      {/* ── LEFT SIDE DRAWER (mobile) ── */}
+      <div className={`fixed inset-0 z-[300] transition-all duration-300 ${isDrawerOpen ? "visible" : "invisible pointer-events-none"}`}>
+        <div
+          className={`absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 ${isDrawerOpen ? "opacity-100" : "opacity-0"}`}
+          onClick={() => setIsDrawerOpen(false)}
+        />
+        <div className={`absolute left-0 top-0 h-full w-72 bg-white flex flex-col shadow-2xl transition-transform duration-300 ease-out ${isDrawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          {/* Drawer header */}
+          <div className="flex items-center justify-between px-5 pt-12 pb-4 bg-gradient-to-br from-slate-800 to-slate-900 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base leading-tight">Admin Panel</p>
+                <p className="text-white/70 text-xs">Store Management</p>
+              </div>
+            </div>
+            <button onClick={() => setIsDrawerOpen(false)} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
+
+            {/* Products */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Products</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/admin/approvals"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Package className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Product Approvals</span>
+                  {pendingApprovals > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(90deg,#f59e0b,#f97316)" }}>{pendingApprovals}</span>}
+                </button>
+                <button onClick={() => { router.push("/admin/products"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <List className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Products (Delist)</span>
+                </button>
+                <button onClick={() => { router.push("/admin/delisted"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <BarChart2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Delisted Products</span>
+                </button>
+                <button onClick={() => { router.push("/admin/stock"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Package className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Stock Table</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Operations */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Operations</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/admin/orders"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <ShoppingBag className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Orders &amp; Checkout</span>
+                  {pendingOrders > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white animate-pulse" style={{ background: "linear-gradient(90deg,#ef4444,#ec4899)" }}>{pendingOrders}</span>}
+                </button>
+                <button onClick={() => { router.push("/admin/returns"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <RotateCcw className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Returns</span>
+                  {pendingReturns > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(90deg,#0ea5e9,#06b6d4)" }}>{pendingReturns}</span>}
+                </button>
+              </div>
+            </div>
+
+            {/* Sellers */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sellers</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/admin/sellers"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Users className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Seller Verification</span>
+                  {pendingSellers > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(90deg,#8b5cf6,#6366f1)" }}>{pendingSellers}</span>}
+                </button>
+                <button onClick={() => { router.push("/admin/approved-sellers"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Store className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Approved Sellers</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                <button onClick={() => { router.push("/admin/payouts"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Seller Payouts</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            {/* Marketing */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Marketing</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/admin/hero"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <BarChart2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Hero Management</span>
+                </button>
+                <button onClick={() => { router.push("/admin/promotions"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <Tag className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Promotions</span>
+                  {activePromotions > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(90deg,#f43f5e,#fb923c)" }}>{activePromotions}</span>}
+                </button>
+              </div>
+            </div>
+
+            {/* Other */}
+            <div>
+              <p className="px-3 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Other</p>
+              <div className="space-y-0.5">
+                <button onClick={() => { router.push("/admin/public-employee"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Public Employee Docs</span>
+                </button>
+                <button onClick={() => { router.push("/admin/business"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Business Applications</span>
+                  {businessPending > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "linear-gradient(90deg,#a3e635,#22d3ee)", color: "#0f172a" }}>{businessPending}</span>}
+                </button>
+              </div>
+            </div>
+          </nav>
+
+          {/* Sign out */}
+          <div className="flex-shrink-0 p-4 border-t border-slate-200 pb-8">
+            <button
+              onClick={async () => { setIsDrawerOpen(false); await supabase.auth.signOut(); router.push("/auth/login"); }}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 text-sm font-semibold transition-all border border-slate-200 hover:border-rose-200"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* HEADER CARD */}
       <section className="glass glass-ring rounded-[28px] p-6 md:p-8">
+        {/* Mobile: hamburger row */}
+        <div className="md:hidden flex items-center justify-between mb-4">
+          <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Admin Dashboard</span>
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5 text-slate-700" />
+          </button>
+        </div>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+            <div className="hidden md:block text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
               Admin
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mt-1">
@@ -426,8 +592,8 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* NAV BUTTONS */}
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* NAV BUTTONS — desktop only; mobile uses drawer */}
+        <div className="mt-6 hidden md:flex flex-wrap gap-3">
           <button
             onClick={() => router.push("/admin/approvals")}
             className="pill px-5 py-3 text-sm font-semibold relative flex items-center gap-2"
