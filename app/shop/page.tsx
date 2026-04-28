@@ -546,11 +546,15 @@ function ShopPageContent() {
   const searchParams = useSearchParams();
   const { cart } = useMiniCart();
 
+  const PAGE_SIZE = 20;
+
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const isScrolledRef = useRef(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -706,6 +710,27 @@ function ShopPageContent() {
       alive = false;
     };
   }, []);
+
+  // Reset visible count when filters/sort change so user always sees fresh first page
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filters.search, filters.category, filters.sortBy, mobileCategory]);
+
+  // IntersectionObserver — load more when sentinel scrolls into view
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + PAGE_SIZE);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading]);
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -1201,7 +1226,7 @@ function ShopPageContent() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2 px-2 pt-2 md:hidden bg-[#f5f5f5]">
-                {filteredProducts.map((p) => {
+                {filteredProducts.slice(0, visibleCount).map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const isWishlisted = wishlist.has(p.id);
 
@@ -1225,7 +1250,7 @@ function ShopPageContent() {
                     : "grid-cols-1"
                 }`}
               >
-                {filteredProducts.map((p) => {
+                {filteredProducts.slice(0, visibleCount).map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const price = p.final_price_cents ?? p.price_cents ?? 0;
                   const originalPrice = p.price_cents;
@@ -1442,6 +1467,16 @@ function ShopPageContent() {
           )}
         </section>
 
+        {/* Sentinel — triggers loading next page when scrolled into view */}
+        <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+        {visibleCount < filteredProducts.length && (
+          <div className="flex justify-center py-8">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+              Loading more…
+            </div>
+          </div>
+        )}
         <div className="h-20" />
       </div>
     </main>
