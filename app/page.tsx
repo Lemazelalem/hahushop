@@ -2169,6 +2169,8 @@ function HomePageContent() {
 
   const [topPicks, setTopPicks] = useState<ApprovedProduct[]>([]);
   const [loadingTopPicks, setLoadingTopPicks] = useState(true);
+  const [mobileFeedSeed, setMobileFeedSeed] = useState<ApprovedProduct[]>([]);
+  const [loadingMobileSeed, setLoadingMobileSeed] = useState(true);
 
   const [mobileSearch, setMobileSearch] = useState("");
   const [authSheetOpen, setAuthSheetOpen] = useState(false);
@@ -2190,14 +2192,14 @@ function HomePageContent() {
 
   const mobileAllProducts = useMemo(() => {
     const seen = new Set<string>();
-    return [...newArrivals, ...deals, ...topRated, ...topPicks, ...explore].filter((p) => {
+    return [...mobileFeedSeed, ...newArrivals, ...deals, ...topRated, ...topPicks, ...explore].filter((p) => {
       if (seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
-  }, [newArrivals, deals, topRated, topPicks, explore]);
+  }, [mobileFeedSeed, newArrivals, deals, topRated, topPicks, explore]);
 
-  const loadingMobileFeed = loadingNew || loadingDeals || loadingTop || loadingTopPicks || loadingExplore;
+  const loadingMobileFeed = loadingMobileSeed && mobileAllProducts.length === 0;
 
   // Check if user has seen welcome screen
   useEffect(() => {
@@ -2392,12 +2394,29 @@ function HomePageContent() {
         if (c.topRated?.length) { setTopRated(c.topRated); setLoadingTop(false); }
         if (c.topPicks?.length) { setTopPicks(c.topPicks); setLoadingTopPicks(false); }
         if (c.explore?.length) { setExplore(c.explore); setLoadingExplore(false); }
+        if (c.mobileFeed?.length) { setMobileFeedSeed(c.mobileFeed); setLoadingMobileSeed(false); }
         setLoadingCategories(false);
       }
     } catch { /* ignore corrupt cache */ }
 
     // Fetch fresh data in background
     async function loadAll() {
+      const mobileFeedPromise = Promise.resolve(
+        supabase
+          .from("products")
+          .select(PRODUCT_FIELDS)
+          .eq("status", "approved")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(20)
+      );
+
+      void mobileFeedPromise
+        .then(({ data, error }) => {
+          if (!error) setMobileFeedSeed((data ?? []).map(mapProduct));
+        })
+        .finally(() => setLoadingMobileSeed(false));
+
       const [
         catRes,
         heroRes,
@@ -2406,6 +2425,7 @@ function HomePageContent() {
         topRes,
         topPicksRes,
         exploreRes,
+        mobileFeedRes,
       ] = await Promise.all([
         supabase
           .from("categories")
@@ -2459,6 +2479,7 @@ function HomePageContent() {
           .eq("is_active", true)
           .order("created_at", { ascending: false })
           .range(8, 32),
+        mobileFeedPromise,
       ]);
 
       // Categories
@@ -2521,6 +2542,8 @@ function HomePageContent() {
       setExplore(exploreMapped);
       setLoadingExplore(false);
 
+      const mobileFeedMapped = (mobileFeedRes.data ?? []).map(mapProduct);
+
       // Cache for instant load next visit
       try {
         localStorage.setItem("hahu-home-cache", JSON.stringify({
@@ -2531,6 +2554,7 @@ function HomePageContent() {
           topRated: topMapped,
           topPicks: topPicksMapped,
           explore: exploreMapped,
+          mobileFeed: mobileFeedMapped,
           ts: Date.now(),
         }));
       } catch { /* storage full — ignore */ }

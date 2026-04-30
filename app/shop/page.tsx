@@ -1,6 +1,14 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useMiniCart } from "@/components/MiniCartProvider";
@@ -41,6 +49,15 @@ const HARDCODED_CATEGORIES = [
 ];
 
 const M_ACCENT = "#FF0255";
+const SHOP_PAGE_SIZE = 20;
+const SHOP_CATEGORIES_CACHE_KEY = "hahu-shop-categories-cache-v1";
+const SHOP_FEED_CACHE_KEY = "hahu-shop-feed-cache-v2";
+const PRODUCT_SELECT = `
+  id, status, name, description, emoji, image_url,
+  final_price_cents, price_cents, rating_avg, rating_count, created_at,
+  stock_quantity, size_variants,
+  categories(id, name)
+`;
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
 
@@ -63,6 +80,34 @@ type ProductRow = {
   stock_quantity: number | null;
   size_variants: SizeVariant[] | null;
 };
+
+function mapProductRow(row: any): ProductRow {
+  return {
+    id: row.id as string,
+    status: (row.status as ProductStatus) ?? "approved",
+    name: (row.name as string) ?? "",
+    description: (row.description as string | null) ?? null,
+    emoji: (row.emoji as string | null) ?? null,
+    image_url: (row.image_url as string | null) ?? null,
+    final_price_cents: (row.final_price_cents as number | null) ?? null,
+    price_cents: (row.price_cents as number | null) ?? null,
+    rating_avg: Number(row.rating_avg ?? 0),
+    rating_count: Number(row.rating_count ?? 0),
+    created_at: (row.created_at as string | null) ?? null,
+    category_name: row.categories?.name ?? null,
+    category_id: row.categories?.id ?? null,
+    stock_quantity: (row.stock_quantity as number | null) ?? null,
+    size_variants: (row.size_variants as SizeVariant[] | null) ?? null,
+  };
+}
+
+function normalizeCategoryKey(value: string): string {
+  return value.toLowerCase().replace(/-/g, "_").trim();
+}
+
+function safePostgrestSearch(value: string): string {
+  return value.replace(/[,%*]/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function getProductStock(stockQty: number | null, sizeVariants: SizeVariant[] | null): number | null {
   if (sizeVariants && sizeVariants.length > 0) {
@@ -546,15 +591,17 @@ function ShopPageContent() {
   const searchParams = useSearchParams();
   const { cart } = useMiniCart();
 
-  const PAGE_SIZE = 20;
-
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef(0);
+  const requestIdRef = useRef(0);
 
   const isScrolledRef = useRef(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -577,6 +624,7 @@ function ShopPageContent() {
     sortBy: "newest",
     viewMode: "grid",
   }));
+  const deferredSearch = useDeferredValue(filters.search);
 
   const [mobileCategory, setMobileCategory] = useState<string>(() => {
     if (!initialCategory) return "All";
@@ -585,6 +633,40 @@ function ShopPageContent() {
     );
     return cat?.label ?? "All";
   });
+
+  const selectedCategory = useMemo(() => {
+    const rawCategory = filters.category.trim();
+    if (rawCategory) {
+      const normalized = normalizeCategoryKey(rawCategory);
+      const direct = categories.find((c) => c.id === rawCategory);
+      if (direct) return direct;
+
+      const bySlug = categories.find((c) => normalizeCategoryKey(c.slug) === normalized);
+      if (bySlug) return bySlug;
+    }
+
+    if (mobileCategory !== "All") {
+      const hardcoded = HARDCODED_CATEGORIES.find((c) => c.label === mobileCategory);
+      const normalized = normalizeCategoryKey(hardcoded?.key ?? mobileCategory);
+      return (
+        categories.find((c) => normalizeCategoryKey(c.slug) === normalized) ??
+        categories.find((c) => c.name.toLowerCase() === mobileCategory.toLowerCase()) ??
+        null
+      );
+    }
+
+    return null;
+  }, [categories, filters.category, mobileCategory]);
+
+  const feedSignature = useMemo(
+    () =>
+      JSON.stringify({
+        q: deferredSearch.trim().toLowerCase(),
+        categoryId: selectedCategory?.id ?? "",
+        sortBy: filters.sortBy,
+      }),
+    [deferredSearch, filters.sortBy, selectedCategory?.id]
+  );
 
   useEffect(() => {
     const savedWishlist = localStorage.getItem("wishlist");
@@ -602,13 +684,16 @@ function ShopPageContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Sync search filter when navigated with ?q= param (e.g. from visual search)
+  // Sync URL filters when navigated with ?q= or ?category= params.
   useEffect(() => {
-    if (initialSearch) {
-      setFilters((prev) => ({ ...prev, search: initialSearch, category: "" }));
-      setMobileCategory("All");
-    }
-  }, [initialSearch]);
+    setFilters((prev) => {
+      const nextCategory = initialSearch ? "" : initialCategory;
+      if (prev.search === initialSearch && prev.category === nextCategory) return prev;
+      return { ...prev, search: initialSearch, category: nextCategory };
+    });
+
+    if (initialSearch) setMobileCategory("All");
+  }, [initialCategory, initialSearch]);
 
   const approvedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
@@ -623,120 +708,209 @@ function ShopPageContent() {
   useEffect(() => {
     let alive = true;
 
-    // Restore cached data instantly
     try {
-      const cached = localStorage.getItem("hahu-shop-cache");
+      const cached = localStorage.getItem(SHOP_CATEGORIES_CACHE_KEY);
       if (cached) {
-        const c = JSON.parse(cached);
-        if (c.categories?.length) setCategories(c.categories);
-        if (c.products?.length) { setProducts(c.products); setLoading(false); }
-      }
-    } catch { /* ignore */ }
-
-    async function load() {
-      try {
-        setPageError(null);
-
-        const [catRes, prodRes] = await Promise.all([
-          supabase
-            .from("categories")
-            .select("id, name, slug")
-            .order("sort_order", { ascending: true })
-            .order("name", { ascending: true }),
-          supabase
-            .from("products")
-            .select(`
-              id, status, name, description, emoji, image_url,
-              final_price_cents, price_cents, rating_avg, rating_count, created_at,
-              stock_quantity, size_variants,
-              categories(id, name)
-            `)
-            .eq("status", "approved")
-            .eq("is_active", true)
-            .order("created_at", { ascending: false }),
-        ]);
-
-        if (!alive) return;
-
-        if (!catRes.error) setCategories(catRes.data || []);
-
-        if (prodRes.error) {
-          setPageError(prodRes.error.message || "Could not load products.");
-          setProducts([]);
-          return;
+        const parsed = JSON.parse(cached);
+        if (parsed.categories?.length) {
+          setCategories(parsed.categories);
+          setCategoriesLoaded(true);
         }
-
-        const rows = (prodRes.data ?? []).map((row: any) => ({
-          id: row.id as string,
-          status: (row.status as ProductStatus) ?? "approved",
-          name: (row.name as string) ?? "",
-          description: (row.description as string | null) ?? null,
-          emoji: (row.emoji as string | null) ?? null,
-          image_url: (row.image_url as string | null) ?? null,
-          final_price_cents: (row.final_price_cents as number | null) ?? null,
-          price_cents: (row.price_cents as number | null) ?? null,
-          rating_avg: Number(row.rating_avg ?? 0),
-          rating_count: Number(row.rating_count ?? 0),
-          created_at: (row.created_at as string | null) ?? null,
-          category_name: row.categories?.name ?? null,
-          category_id: row.categories?.id ?? null,
-          stock_quantity: (row.stock_quantity as number | null) ?? null,
-          size_variants: (row.size_variants as SizeVariant[] | null) ?? null,
-        }));
-
-        setProducts(rows);
-
-        // Cache for next visit
-        try {
-          localStorage.setItem("hahu-shop-cache", JSON.stringify({
-            categories: catRes.data ?? [],
-            products: rows,
-            ts: Date.now(),
-          }));
-        } catch { /* storage full */ }
-      } catch (err) {
-        console.error("[shop] unexpected error:", err);
-        if (!alive) return;
-        setPageError("Unexpected error.");
-        setProducts([]);
-      } finally {
-        if (!alive) return;
-        setLoading(false);
       }
+    } catch {
+      /* ignore corrupt cache */
     }
 
-    load();
+    async function loadCategories() {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, slug")
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
+
+      if (!alive) return;
+
+      if (!error) {
+        setCategories(data || []);
+        try {
+          localStorage.setItem(
+            SHOP_CATEGORIES_CACHE_KEY,
+            JSON.stringify({ categories: data ?? [], ts: Date.now() })
+          );
+        } catch {
+          /* storage full */
+        }
+      }
+
+      setCategoriesLoaded(true);
+    }
+
+    loadCategories();
     return () => {
       alive = false;
     };
   }, []);
 
-  // Reset visible count when filters/sort change so user always sees fresh first page
+  const loadProductsPage = useCallback(
+    async (pageIndex: number, mode: "replace" | "append", requestId: number) => {
+      if (mode === "append") {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        setLoadingMore(false);
+      }
+
+      try {
+        setPageError(null);
+
+        const from = pageIndex * SHOP_PAGE_SIZE;
+        const to = from + SHOP_PAGE_SIZE - 1;
+        const search = safePostgrestSearch(deferredSearch.trim());
+
+        let query = supabase
+          .from("products")
+          .select(PRODUCT_SELECT)
+          .eq("status", "approved")
+          .eq("is_active", true);
+
+        if (selectedCategory?.id) {
+          query = query.eq("category_id", selectedCategory.id);
+        }
+
+        if (search) {
+          query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+        }
+
+        switch (filters.sortBy) {
+          case "price-low":
+            query = query
+              .order("final_price_cents", { ascending: true, nullsFirst: false })
+              .order("created_at", { ascending: false });
+            break;
+          case "price-high":
+            query = query
+              .order("final_price_cents", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false });
+            break;
+          case "rating":
+            query = query
+              .order("rating_avg", { ascending: false })
+              .order("rating_count", { ascending: false })
+              .order("created_at", { ascending: false });
+            break;
+          default:
+            query = query.order("created_at", { ascending: false });
+        }
+
+        const { data, error } = await query.range(from, to);
+        if (requestIdRef.current !== requestId) return;
+
+        if (error) {
+          setPageError(error.message || "Could not load products.");
+          if (mode === "replace") setProducts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const rows = (data ?? []).map(mapProductRow);
+        pageRef.current = pageIndex;
+        setHasMore(rows.length === SHOP_PAGE_SIZE);
+
+        setProducts((prev) => {
+          if (mode === "replace") return rows;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...rows.filter((row) => !seen.has(row.id))];
+        });
+
+        if (mode === "replace") {
+          try {
+            localStorage.setItem(
+              SHOP_FEED_CACHE_KEY,
+              JSON.stringify({
+                signature: feedSignature,
+                products: rows,
+                hasMore: rows.length === SHOP_PAGE_SIZE,
+                ts: Date.now(),
+              })
+            );
+          } catch {
+            /* storage full */
+          }
+        }
+      } catch (err) {
+        console.error("[shop] unexpected error:", err);
+        if (requestIdRef.current !== requestId) return;
+        setPageError("Unexpected error.");
+        if (mode === "replace") setProducts([]);
+        setHasMore(false);
+      } finally {
+        if (requestIdRef.current !== requestId) return;
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [deferredSearch, feedSignature, filters.sortBy, selectedCategory?.id]
+  );
+
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [filters.search, filters.category, filters.sortBy, mobileCategory]);
+    if (!categoriesLoaded) return;
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    pageRef.current = 0;
+
+    let hydratedFromCache = false;
+    try {
+      const cached = localStorage.getItem(SHOP_FEED_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.signature === feedSignature && Array.isArray(parsed.products)) {
+          setProducts(parsed.products);
+          setHasMore(Boolean(parsed.hasMore));
+          setLoading(false);
+          hydratedFromCache = true;
+        }
+      }
+    } catch {
+      /* ignore corrupt cache */
+    }
+
+    if (!hydratedFromCache) {
+      setProducts([]);
+      setHasMore(false);
+    }
+
+    loadProductsPage(0, "replace", requestId);
+
+    return () => {
+      if (requestIdRef.current === requestId) requestIdRef.current += 1;
+    };
+  }, [categoriesLoaded, feedSignature, loadProductsPage]);
 
   // IntersectionObserver — load more when sentinel scrolls into view
   useEffect(() => {
+    if (loading || loadingMore || !hasMore) return;
+
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => prev + PAGE_SIZE);
-        }
+        if (!entries[0].isIntersecting || loadingMore || !hasMore) return;
+        loadProductsPage(pageRef.current + 1, "append", requestIdRef.current);
       },
-      { rootMargin: "200px" }
+      { rootMargin: "360px" }
     );
+
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loading]);
+  }, [hasMore, loadProductsPage, loading, loadingMore]);
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    if (filters.search.trim()) {
-      const q = filters.search.trim().toLowerCase();
+    if (deferredSearch.trim()) {
+      const q = deferredSearch.trim().toLowerCase();
       result = result.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
@@ -745,8 +919,8 @@ function ShopPageContent() {
       );
     }
 
-    if (filters.category) {
-      result = result.filter((p) => p.category_id === filters.category);
+    if (selectedCategory?.id) {
+      result = result.filter((p) => p.category_id === selectedCategory.id);
     }
 
     if (mobileCategory !== "All") {
@@ -797,7 +971,7 @@ function ShopPageContent() {
     }
 
     return result;
-  }, [products, filters.category, filters.search, mobileCategory, filters.sortBy]);
+  }, [products, deferredSearch, selectedCategory?.id, mobileCategory, filters.sortBy]);
 
   const toggleWishlist = useCallback((productId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -923,7 +1097,7 @@ function ShopPageContent() {
     return [...prioritized, ...rest];
   }, [categories]);
 
-  const currentCategory = categories.find((c) => c.id === filters.category);
+  const currentCategory = selectedCategory;
 
   return (
     <main className="min-h-screen bg-slate-100 md:bg-slate-50">
@@ -1138,7 +1312,7 @@ function ShopPageContent() {
                 {currentCategory?.name || "All Products"}
               </h1>
               <span className="text-lg font-medium text-slate-500">
-                {filteredProducts.length.toLocaleString()} items
+                {filteredProducts.length.toLocaleString()}{hasMore ? "+" : ""} items
               </span>
             </div>
           </div>
@@ -1226,7 +1400,7 @@ function ShopPageContent() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2 px-2 pt-2 md:hidden bg-[#f5f5f5]">
-                {filteredProducts.slice(0, visibleCount).map((p) => {
+                {filteredProducts.map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const isWishlisted = wishlist.has(p.id);
 
@@ -1250,7 +1424,7 @@ function ShopPageContent() {
                     : "grid-cols-1"
                 }`}
               >
-                {filteredProducts.slice(0, visibleCount).map((p) => {
+                {filteredProducts.map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const price = p.final_price_cents ?? p.price_cents ?? 0;
                   const originalPrice = p.price_cents;
@@ -1469,7 +1643,7 @@ function ShopPageContent() {
 
         {/* Sentinel — triggers loading next page when scrolled into view */}
         <div ref={sentinelRef} className="h-1" aria-hidden="true" />
-        {visibleCount < filteredProducts.length && (
+        {loadingMore && (
           <div className="flex justify-center py-8">
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
