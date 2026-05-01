@@ -609,6 +609,7 @@ export default function CheckoutPage() {
         qty: number;
         unit_price_cents: number;
         line_total_cents: number;
+        seller_price_cents: number | null;
         price_tier: "customer" | "public_employee";
         color_name: string | null;
         size_label: string | null;
