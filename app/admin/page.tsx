@@ -232,20 +232,21 @@ export default function AdminDashboard() {
         // Get all orders
         const { data: orders, error: ordersErr } = await supabase
           .from("orders")
-          .select("id, created_at, total_cents, status, user_id")
+          .select("id, created_at, total_cents, status, payment_status, user_id")
           .order("created_at", { ascending: false });
 
         if (ordersErr) throw ordersErr;
 
         const ordersList = orders || [];
-        
-        // Calculate revenue metrics
-        const totalRevenueCents = ordersList.reduce((sum, o) => sum + (o.total_cents || 0), 0);
-        const todayOrders = ordersList.filter(o => new Date(o.created_at) >= today);
+        const paidOrders = ordersList.filter(o => o.payment_status === "paid");
+
+        // Calculate revenue metrics — only count orders that have actually been paid
+        const totalRevenueCents = paidOrders.reduce((sum, o) => sum + (o.total_cents || 0), 0);
+        const todayOrders = paidOrders.filter(o => new Date(o.created_at) >= today);
         const todayRevenueCents = todayOrders.reduce((sum, o) => sum + (o.total_cents || 0), 0);
-        const weekOrders = ordersList.filter(o => new Date(o.created_at) >= weekAgo);
+        const weekOrders = paidOrders.filter(o => new Date(o.created_at) >= weekAgo);
         const weekRevenueCents = weekOrders.reduce((sum, o) => sum + (o.total_cents || 0), 0);
-        const monthOrdersList = ordersList.filter(o => new Date(o.created_at) >= monthAgo);
+        const monthOrdersList = paidOrders.filter(o => new Date(o.created_at) >= monthAgo);
         const monthRevenueCents = monthOrdersList.reduce((sum, o) => sum + (o.total_cents || 0), 0);
 
         // Status breakdown

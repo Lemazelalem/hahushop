@@ -991,7 +991,7 @@ export default function AdminOrdersPage() {
       processing: realOrders.filter((o) => o.status === "processing").length,
       completed: realOrders.filter((o) => o.status === "completed").length,
       totalRevenue: realOrders
-        .filter((o) => o.status === "completed")
+        .filter((o) => o.payment_status === "paid")
         .reduce((acc, o) => acc + (o.total_cents || 0), 0),
     }),
     [realOrders]

@@ -48,6 +48,7 @@ type ApprovedProduct = {
   image_url: string | null;
   final_price_cents: number | null;
   public_employee_price_cents: number | null;
+  seller_price_cents: number | null;
   rating_avg: number;
   rating_count: number;
   category: string | null;
@@ -544,7 +545,7 @@ export default function CheckoutPage() {
         const { data, error } = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, emoji, image_url, final_price_cents, public_employee_price_cents, rating_avg, rating_count, categories(name)",
+            "id, seller_id, name, emoji, image_url, final_price_cents, public_employee_price_cents, seller_price_cents, rating_avg, rating_count, categories(name)",
           )
           .in("id", ids);
 
@@ -565,6 +566,7 @@ export default function CheckoutPage() {
             image_url: r.image_url ?? null,
             final_price_cents: r.final_price_cents ?? null,
             public_employee_price_cents: r.public_employee_price_cents ?? null,
+            seller_price_cents: r.seller_price_cents ?? null,
             rating_avg: r.rating_avg ?? 0,
             rating_count: r.rating_count ?? 0,
             category:
@@ -717,6 +719,7 @@ export default function CheckoutPage() {
           qty: line.qty,
           unit_price_cents: unit,
           line_total_cents: lineTotal,
+          seller_price_cents: p.seller_price_cents ?? null,
           price_tier: isPublicEmployee ? "public_employee" : "customer",
           color_name: line.meta.colorName ?? null,
           size_label: line.meta.sizeLabel ?? null,

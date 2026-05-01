@@ -113,6 +113,8 @@ export async function GET() {
           image_url_snapshot: si.image_url_snapshot ?? null,
           quantity: si.qty ?? 0,
           line_total_cents: si.line_total_cents ?? 0,
+          // Prefer price snapshotted at order time; fall back to live lookup below
+          seller_price_cents_snapshot: si.seller_price_cents ?? null,
           color_name: si.color_name ?? null,
           size_label: si.size_label ?? null,
           order_id: order.id,
@@ -141,7 +143,11 @@ export async function GET() {
 
     const enrichedItems = (items as any[]).map((item) => ({
       ...item,
-      seller_price_cents: item.product_id ? (sellerPriceMap[item.product_id] ?? 0) : 0,
+      // Use price captured at order time when available; fall back to current product price
+      // for orders placed before the snapshot was introduced.
+      seller_price_cents:
+        item.seller_price_cents_snapshot ??
+        (item.product_id ? (sellerPriceMap[item.product_id] ?? 0) : 0),
     }));
 
     console.log("[seller/orders] sellerId:", sellerId, "matching items:", enrichedItems.length);
