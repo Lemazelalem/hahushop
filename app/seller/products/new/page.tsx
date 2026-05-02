@@ -1563,7 +1563,8 @@ export default function NewProductPage() {
   function handleToggleSizes() {
     if (hasSizes) {
       const total = sizeVariants.reduce((s, v) => s + (v.stock || 0), 0);
-      setStockQuantity(String(total));
+      if (total > 0) setStockQuantity(String(total));
+      else setStockQuantity("");
       setSizeVariants([]);
     }
     setHasSizes((v) => !v);
