@@ -695,6 +695,13 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            onClick={() => router.push("/admin/customers")}
+            className="pill px-5 py-3 text-sm font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors flex items-center gap-2"
+          >
+            👥 Customer Data
+          </button>
+
+          <button
             onClick={() => router.push("/admin/delisted")}
             className="pill px-5 py-3 text-sm font-semibold bg-amber-50 text-amber-700 border border-amber-200"
           >
