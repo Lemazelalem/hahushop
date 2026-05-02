@@ -8,7 +8,7 @@ import {
   Menu, X, ShoppingCart, BadgeCheck,
   User, Package, CreditCard, Landmark, LayoutDashboard,
   Tag, Sparkles, Phone, ChevronRight, LogIn, UserPlus,
-  MapPin, FileText, Shield,
+  MapPin, FileText, Shield, Briefcase,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -23,6 +23,7 @@ type ProfileRow = {
   role: "admin" | "seller" | "customer" | null;
   is_public_employee: boolean | null;
   pe_verification_status: "pending" | "approved" | "rejected" | null;
+  is_business_account: boolean | null;
 };
 
 export default function Navbar() {
@@ -60,7 +61,7 @@ export default function Navbar() {
 
         const { data: prof, error: profError } = await supabase
           .from("profiles")
-          .select("id, role, is_public_employee, pe_verification_status")
+          .select("id, role, is_public_employee, pe_verification_status, is_business_account")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -97,6 +98,7 @@ export default function Navbar() {
   const isAdmin = profile?.role === "admin";
   const isSeller = profile?.role === "seller";
   const isCustomer = profile?.role === "customer";
+  const isBusinessAccount = profile?.is_business_account === true;
   const isGuest = authLoaded && !profile;
 
   const isVerifiedPE =
@@ -383,7 +385,7 @@ export default function Navbar() {
 
           {/* Role Badge */}
           {authLoaded && profile && (
-            <div className="px-5 pt-4 pb-1 flex-shrink-0">
+            <div className="px-5 pt-4 pb-1 flex-shrink-0 flex items-center gap-2 flex-wrap">
               <div
                 className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${
                   isAdmin
@@ -400,6 +402,13 @@ export default function Navbar() {
                 />
                 {roleLabel}
               </div>
+              {isBusinessAccount && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-black"
+                  style={{ background: "rgba(163,230,53,0.1)", borderColor: "rgba(163,230,53,0.3)", color: "#a3e635" }}>
+                  <Briefcase className="w-3 h-3" />
+                  Hahu Business
+                </div>
+              )}
             </div>
           )}
 
@@ -456,6 +465,16 @@ export default function Navbar() {
                         <span className="text-[10px] text-slate-600 group-hover:text-slate-500">More tab</span>
                       </Link>
                     </>
+                  )}
+
+                  {isBusinessAccount && (
+                    <Link href="/business" onClick={() => setIsDrawerOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors group"
+                      style={{ color: "#a3e635" }}>
+                      <Briefcase className="w-4 h-4 flex-shrink-0" style={{ color: "#a3e635" }} />
+                      <span className="text-sm font-bold flex-1">Hahu Business Dashboard</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                    </Link>
                   )}
 
                   {isAdmin && (
