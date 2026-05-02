@@ -1306,6 +1306,7 @@ function MobileAuthSheet({
   userName,
   userEmail,
   userRole,
+  isBusinessAccount,
   onLogout,
 }: {
   open: boolean;
@@ -1314,6 +1315,7 @@ function MobileAuthSheet({
   userName: string | null;
   userEmail: string | null;
   userRole: string | null;
+  isBusinessAccount: boolean;
   onLogout: () => Promise<void>;
 }) {
   const router = useRouter();
@@ -1390,6 +1392,18 @@ function MobileAuthSheet({
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userName}</div>
                   <div style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userEmail}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                    {userRole && (
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "#0891b2" }}>
+                        {userRole}
+                      </span>
+                    )}
+                    {isBusinessAccount && (
+                      <span style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", color: "#a3e635" }}>
+                        · Hahu Business
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1417,6 +1431,14 @@ function MobileAuthSheet({
                 </button>
               )}
 
+              {isBusinessAccount && (
+                <button
+                  onClick={() => { onClose(); router.push("/business"); }}
+                  style={btnStyle("#f7fee7", "#4d7c0f")}
+                >
+                  💼 Hahu Business Dashboard
+                </button>
+              )}
               <button onClick={() => { onClose(); router.push("/account"); }} style={btnStyle("#0f172a", "#fff")}>My Account</button>
               <button onClick={() => { onClose(); router.push("/my-orders"); }} style={btnStyle("#f8fafc", "#0f172a")}>My Orders</button>
               {userRole === "customer" && (
@@ -2180,6 +2202,7 @@ function HomePageContent() {
   const [userInitial, setUserInitial] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isBusinessAccount, setIsBusinessAccount] = useState(false);
   const [mobileCartCount, setMobileCartCount] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
@@ -2269,11 +2292,12 @@ function HomePageContent() {
 
           const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
+            .select("role, is_business_account")
             .eq("id", user.id)
             .single();
 
           setUserRole(profile?.role ?? "customer");
+          setIsBusinessAccount(profile?.is_business_account === true);
         }
       } catch (err) {
         console.error("Auth check error:", err);
@@ -2746,6 +2770,7 @@ function HomePageContent() {
         userName={userName}
         userEmail={userEmail}
         userRole={userRole}
+        isBusinessAccount={isBusinessAccount}
         onLogout={handleLogout}
       />
 
