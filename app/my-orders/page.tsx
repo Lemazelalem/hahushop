@@ -350,7 +350,7 @@ export default function MyOrdersPage() {
     try {
       const { data: ordersData, error } = await supabase
         .from("orders")
-        .select("id, created_at, status, total_cents, shipping_full_name, shipping_city, shipping_woreda, shipping_region, estimated_delivery_date, delivered_at, tracking_note, payment_method")
+        .select("id, created_at, status, total_cents, shipping_full_name, shipping_city, shipping_woreda, shipping_region, estimated_delivery_date, delivered_at, tracking_note, payment_method, cart_snapshot")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
@@ -393,20 +393,37 @@ export default function MyOrdersPage() {
         });
       }
 
-      const built: Order[] = ordersData.map((o: any) => ({
-        id: o.id, created_at: o.created_at, status: o.status,
-        total_cents: o.total_cents ?? 0,
-        shipping_full_name: o.shipping_full_name ?? null,
-        shipping_city: o.shipping_city ?? null,
-        shipping_woreda: o.shipping_woreda ?? null,
-        shipping_region: o.shipping_region ?? null,
-        estimated_delivery_date: o.estimated_delivery_date ?? null,
-        delivered_at: o.delivered_at ?? null,
-        tracking_note: o.tracking_note ?? null,
-        payment_method: o.payment_method ?? null,
-        items: itemsByOrder[o.id] ?? [],
-        events: eventsByOrder[o.id] ?? [],
-      }));
+      const built: Order[] = ordersData.map((o: any) => {
+        let items = itemsByOrder[o.id] ?? [];
+
+        // Fall back to cart_snapshot when order_items table has no rows for this order
+        if (items.length === 0 && Array.isArray(o.cart_snapshot?.items)) {
+          items = (o.cart_snapshot.items as any[]).map((si, idx) => ({
+            id: `snap-${o.id}-${idx}`,
+            name_snapshot: si.name_snapshot ?? "Product",
+            emoji_snapshot: si.emoji_snapshot ?? null,
+            image_url_snapshot: si.image_url_snapshot ?? null,
+            quantity: si.qty ?? 1,
+            line_total_cents: si.line_total_cents ?? 0,
+            product_id: si.product_id ?? null,
+          }));
+        }
+
+        return {
+          id: o.id, created_at: o.created_at, status: o.status,
+          total_cents: o.total_cents ?? 0,
+          shipping_full_name: o.shipping_full_name ?? null,
+          shipping_city: o.shipping_city ?? null,
+          shipping_woreda: o.shipping_woreda ?? null,
+          shipping_region: o.shipping_region ?? null,
+          estimated_delivery_date: o.estimated_delivery_date ?? null,
+          delivered_at: o.delivered_at ?? null,
+          tracking_note: o.tracking_note ?? null,
+          payment_method: o.payment_method ?? null,
+          items,
+          events: eventsByOrder[o.id] ?? [],
+        };
+      });
 
       setOrders(built);
     } catch (err) {
