@@ -390,6 +390,9 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, removeItem, setQty, clearCart } = useMiniCart();
 
+  // Payment method controls — loaded from DB so admins can toggle availability
+  const [disabledPaymentMethods, setDisabledPaymentMethods] = useState<Set<string>>(new Set());
+
   const [approvedProducts, setApprovedProducts] = useState<ApprovedProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -463,6 +466,32 @@ export default function CheckoutPage() {
       }
     }
     load();
+  }, []);
+
+  /* ── Load payment method controls (admin-managed toggles) ──────────────── */
+
+  useEffect(() => {
+    let alive = true;
+    async function loadControls() {
+      try {
+        const { data, error } = await supabase
+          .from("payment_method_controls")
+          .select("id, is_enabled");
+
+        if (!alive || error) return;
+
+        const disabled = new Set<string>(
+          (data ?? [])
+            .filter((row: { id: string; is_enabled: boolean }) => !row.is_enabled)
+            .map((row: { id: string; is_enabled: boolean }) => row.id)
+        );
+        setDisabledPaymentMethods(disabled);
+      } catch {
+        // Non-fatal: if fetch fails, all methods remain visible
+      }
+    }
+    loadControls();
+    return () => { alive = false; };
   }, []);
 
   /* ── Persist & restore shipping details via localStorage ───────────────── */
@@ -768,6 +797,11 @@ export default function CheckoutPage() {
 
   const isPaymentMethodActive = ACTIVE_PAYMENT_METHODS.includes(paymentMethod);
 
+  // Payment options visible to the customer (admin-disabled methods are hidden)
+  const visiblePaymentOptions = PAYMENT_OPTIONS.filter(
+    (opt) => !disabledPaymentMethods.has(opt.id)
+  );
+
   /* ── Place order ────────────────────────────────────────────────────────── */
 
   async function handlePlaceOrder() {
@@ -782,6 +816,10 @@ export default function CheckoutPage() {
     }
     if (!isShippingValid()) {
       setOrderError("Please fill in Name, Phone, Region and City.");
+      return;
+    }
+    if (disabledPaymentMethods.has(paymentMethod)) {
+      setOrderError("The selected payment method is currently unavailable. Please choose another.");
       return;
     }
     if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod)) {
@@ -1359,8 +1397,8 @@ export default function CheckoutPage() {
 
     {/* ── Payment ── */}
     {!isBusinessOrder && (() => {
-      const activeOpts = PAYMENT_OPTIONS.filter((o) => o.status === "active");
-      const otherOpts = PAYMENT_OPTIONS.filter((o) => o.status !== "active");
+      const activeOpts = visiblePaymentOptions.filter((o) => o.status === "active");
+      const otherOpts = visiblePaymentOptions.filter((o) => o.status !== "active");
       const allVisible = paymentExpanded ? [...activeOpts, ...otherOpts] : activeOpts;
 
       return (
@@ -1929,7 +1967,7 @@ export default function CheckoutPage() {
                       <span className="ml-auto text-[10px] text-slate-400">Secure &amp; encrypted</span>
                     </div>
                     <div className="divide-y divide-slate-100">
-                      {PAYMENT_OPTIONS.filter((o) => paymentExpanded ? true : o.status === "active").map((opt) => {
+                      {visiblePaymentOptions.filter((o) => paymentExpanded ? true : o.status === "active").map((opt) => {
                         const selected = paymentMethod === opt.id;
                         const Icon = opt.Icon;
                         const isLocked = opt.status === "locked";

@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import {
   Menu, X, ChevronRight, LogOut, Shield,
   Package, ShoppingBag, Users, DollarSign,
-  BarChart2, Tag, RotateCcw, FileText, Store, List,
+  BarChart2, Tag, RotateCcw, FileText, Store, List, CreditCard,
 } from "lucide-react";
 
 type ProductStatus =
@@ -541,6 +541,12 @@ export default function AdminDashboard() {
                   <span className="flex-1 text-left">Business Applications</span>
                   {businessPending > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "linear-gradient(90deg,#a3e635,#22d3ee)", color: "#0f172a" }}>{businessPending}</span>}
                 </button>
+                <button onClick={() => { router.push("/admin/payment-controls"); setIsDrawerOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                  <CreditCard className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 text-left">Payment Controls</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
               </div>
             </div>
           </nav>
@@ -771,6 +777,15 @@ export default function AdminDashboard() {
                 {businessPending}
               </span>
             )}
+          </button>
+
+          {/* Payment Controls */}
+          <button
+            onClick={() => router.push("/admin/payment-controls")}
+            className="pill px-5 py-3 text-sm font-semibold flex items-center gap-2 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+          >
+            <CreditCard className="w-4 h-4" />
+            Payment Controls
           </button>
         </div>
       </section>
