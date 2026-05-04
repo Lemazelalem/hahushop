@@ -3,9 +3,9 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.hahushop.twa",
+      "package_name": "app.vercel.hahushop.twa",
       "sha256_cert_fingerprints": [
-        "TODO:REPLACE_WITH_YOUR_SHA256_FINGERPRINT"
+        "D5:04:49:97:FC:9C:99:A4:73:FF:99:24:EE:5B:38:4C:03:9A:5A:B6:57:FD:4E:67:B5:DD:F0:6A:78:1B:CB:56"
       ]
     }
   }
