@@ -63,10 +63,16 @@
   "screenshots": [
     {
       "src": "/images/welcome-hero.jpg",
-      "sizes": "1080x1920",
+      "sizes": "875x1280",
       "type": "image/jpeg",
       "form_factor": "narrow",
       "label": "HahuShop welcome screen"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.hahushop.twa"
     }
   ]
 }
