@@ -82,6 +82,10 @@ const ACTIVE_PAYMENT_METHODS: PaymentMethod[] = [
 
 const COMING_SOON_METHODS: PaymentMethod[] = ["ceb_link", "telebirr"];
 
+// Orders below this threshold incur a delivery fee
+const FREE_DELIVERY_THRESHOLD_CENTS = 500_000; // ETB 5,000
+const DELIVERY_FEE_CENTS = 45_000;             // ETB 450
+
 interface PaymentOption {
   id: PaymentMethod;
   label: string;
@@ -624,7 +628,7 @@ export default function CheckoutPage() {
 
   const hasAnyItems = displayedItemCount > 0;
 
-  const { subtotalCents, taxCents, totalCents, snapshotItems, mergedItems } =
+  const { subtotalCents, taxCents, deliveryCents, totalCents, snapshotItems, mergedItems } =
     useMemo(() => {
       let subtotal = 0;
 
@@ -775,10 +779,16 @@ export default function CheckoutPage() {
         });
       }
 
+      const deliveryCents =
+        subtotal > 0 && subtotal < FREE_DELIVERY_THRESHOLD_CENTS
+          ? DELIVERY_FEE_CENTS
+          : 0;
+
       return {
         subtotalCents: subtotal,
         taxCents: 0,
-        totalCents: subtotal,
+        deliveryCents,
+        totalCents: subtotal + deliveryCents,
         snapshotItems: snap,
         mergedItems: merged,
       };
@@ -886,6 +896,7 @@ export default function CheckoutPage() {
           payment_method: dbPaymentMethod,
           subtotal_cents: subtotalCents,
           tax_cents: taxCents,
+          delivery_cents: deliveryCents,
           total_cents: totalCents,
           shipping_full_name: shipping.full_name,
           shipping_phone: shipping.phone,
@@ -904,6 +915,7 @@ export default function CheckoutPage() {
             items: snapshotItems,
             subtotal_cents: subtotalCents,
             tax_cents: taxCents,
+            delivery_cents: deliveryCents,
             total_cents: totalCents,
             shipping,
             payment_method: paymentMethod,
@@ -1516,9 +1528,18 @@ export default function CheckoutPage() {
             <span className="font-bold text-slate-900">{money(subtotalCents)}</span>
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-600">
-            <span>Shipping</span>
-            <span className="font-bold text-emerald-600">Free</span>
+            <span>Delivery</span>
+            {deliveryCents > 0 ? (
+              <span className="font-bold text-slate-900">{money(deliveryCents)}</span>
+            ) : (
+              <span className="font-bold text-emerald-600">Free</span>
+            )}
           </div>
+          {deliveryCents > 0 && (
+            <div className="text-[10px] text-amber-600 font-medium -mt-1">
+              💡 Make your order above ETB 5,000 to get free delivery
+            </div>
+          )}
           <div className="flex items-center justify-between text-[11px] text-slate-600">
             <span>Tax</span>
             <span className="font-bold text-slate-900">{money(taxCents)}</span>
@@ -2039,9 +2060,18 @@ export default function CheckoutPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-slate-600 text-xs">
-                        <span>Shipping</span>
-                        <span className="font-medium text-emerald-600">Free</span>
+                        <span>Delivery</span>
+                        {deliveryCents > 0 ? (
+                          <span className="font-medium text-slate-900">{money(deliveryCents)}</span>
+                        ) : (
+                          <span className="font-medium text-emerald-600">Free</span>
+                        )}
                       </div>
+                      {deliveryCents > 0 && (
+                        <div className="text-[10px] text-amber-600 font-medium -mt-1">
+                          💡 Make your order above ETB 5,000 to get free delivery
+                        </div>
+                      )}
                       <div className="flex items-center justify-between text-slate-600 text-xs">
                         <span>Tax</span>
                         <span className="font-medium text-slate-900">
