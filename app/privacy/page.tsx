@@ -136,8 +136,8 @@ export default function PrivacyPolicyPage() {
             </ul>
             <p>
               To exercise these rights, contact us at{" "}
-              <a href="mailto:privacy@hahushop.et" className="text-lime-700 underline">
-                privacy@hahushop.et
+              <a href="mailto:customer.support@hahushop.com" className="text-lime-700 underline">
+                customer.support@hahushop.com
               </a>.
             </p>
           </section>
@@ -176,13 +176,13 @@ export default function PrivacyPolicyPage() {
             </p>
             <ul className="list-none space-y-1">
               <li><strong>Email:</strong>{" "}
-                <a href="mailto:privacy@hahushop.et" className="text-lime-700 underline">
-                  privacy@hahushop.et
+                <a href="mailto:customer.support@hahushop.com" className="text-lime-700 underline">
+                  customer.support@hahushop.com
                 </a>
               </li>
-              <li><strong>Business inquiries:</strong>{" "}
-                <a href="mailto:business@hahushop.et" className="text-lime-700 underline">
-                  business@hahushop.et
+              <li><strong>Business inquiries:</strong>{"\ "}
+                <a href="mailto:customer.support@hahushop.com" className="text-lime-700 underline">
+                  customer.support@hahushop.com
                 </a>
               </li>
               <li><strong>Location:</strong> Addis Ababa, Ethiopia</li>
