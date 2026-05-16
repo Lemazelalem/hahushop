@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { setCached, getCached, productCacheKey } from "@/lib/productCache";
 import { useMiniCart } from "@/components/MiniCartProvider";
 import {
   Search,
@@ -973,8 +974,21 @@ function ShopPageContent() {
     return result;
   }, [products, deferredSearch, selectedCategory?.id, mobileCategory, filters.sortBy]);
 
-  const toggleWishlist = useCallback((productId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const prefetchProduct = useCallback((id: string) => {
+    if (getCached(productCacheKey(id))) return; // already cached
+    supabase
+      .from("products")
+      .select(`id, name, description, emoji, status, price_cents, final_price_cents, seller_price_cents, public_employee_price_cents, image_url, extra_image_urls, stock_quantity, color_variants, size_variants, category:categories(name)`)
+      .eq("id", id)
+      .eq("status", "approved")
+      .eq("is_active", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setCached(productCacheKey(id), data);
+      });
+  }, []);
+
+  const toggleWishlist = useCallback((productId: string, e: React.MouseEvent) => {    e.stopPropagation();
     setWishlist((prev) => {
       const newWishlist = new Set(prev);
       if (newWishlist.has(productId)) {
@@ -1410,7 +1424,7 @@ function ShopPageContent() {
                       p={p}
                       qtyInCart={qtyInCart}
                       isWishlisted={isWishlisted}
-                      onNavigate={(id) => router.push(`/shop/${id}`)}
+                      onNavigate={(id) => { prefetchProduct(id); router.push(`/shop/${id}`); }}
                       onToggleWishlist={toggleWishlist}
                     />
                   );
@@ -1542,6 +1556,8 @@ function ShopPageContent() {
                   return (
                     <article
                       key={p.id}
+                      onMouseEnter={() => prefetchProduct(p.id)}
+                      onTouchStart={() => prefetchProduct(p.id)}
                       className="group bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-2xl hover:border-blue-300 transition-all duration-300 flex flex-col"
                     >
                       <div

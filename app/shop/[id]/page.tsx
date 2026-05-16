@@ -7,6 +7,7 @@ import { useMiniCart } from "@/components/MiniCartProvider";
 import type { ItemMeta } from "@/components/MiniCartProvider";
 import { flyToCart } from "@/lib/flyToCart";
 import { ShoppingCart, Check, Minus, Plus, X } from "lucide-react";
+import { getCached, setCached, productCacheKey } from "@/lib/productCache";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
 
@@ -168,8 +169,18 @@ export default function ProductDetailPage() {
     const productIdForLoad = currentProductId;
 
     async function load() {
-      setLoading(true);
       setPageError(null);
+
+      // Serve from cache immediately if available
+      const cacheKey = productCacheKey(productIdForLoad);
+      const cached = getCached<ProductRow>(cacheKey);
+      if (cached) {
+        setProduct(cached);
+        setLoading(false);
+        // Still refresh in background silently
+      } else {
+        setLoading(true);
+      }
 
       try {
         const { data: userData } = await supabase.auth.getUser();
@@ -223,6 +234,7 @@ export default function ProductDetailPage() {
             : productData.category ?? null,
         } as ProductRow;
 
+        setCached(productCacheKey(productIdForLoad), normalizedProduct);
         setProduct(normalizedProduct);
         await loadRatings(productIdForLoad, uid);
       } catch (err) {
