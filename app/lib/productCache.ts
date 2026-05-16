@@ -2,7 +2,7 @@
 // In-memory product cache. Survives navigation within the same browser session.
 // Products are cached for 5 minutes then re-fetched in the background.
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute
 
 type CacheEntry<T> = {
   data: T;
