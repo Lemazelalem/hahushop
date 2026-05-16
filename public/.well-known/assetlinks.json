@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "app.vercel.hahushop.twa",
       "sha256_cert_fingerprints": [
-        "D5:04:49:97:FC:9C:99:A4:73:FF:99:24:EE:5B:38:4C:03:9A:5A:B6:57:FD:4E:67:B5:DD:F0:6A:78:1B:CB:56"
+        "D5:04:49:97:FC:9C:99:A4:73:FF:99:24:EE:5B:38:4C:03:9A:5A:B6:57:FD:4E:67:B5:DD:F0:6A:78:1B:CB:56",
+        "40:48:45:A9:AF:70:69:7F:34:BA:29:C3:1B:29:01:E4:5D:67:14:65:43:F4:47:43:7F:AF:84:A0:FA:EA:CE:C1"
       ]
     }
   }
