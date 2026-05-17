@@ -2781,7 +2781,6 @@ function HomePageContent() {
           ref={imageInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           style={{ display: "none" }}
           onChange={handleImagePicked}
         />
