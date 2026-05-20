@@ -779,7 +779,15 @@ function ShopPageContent() {
         }
 
         if (search) {
-          query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+          const words = search.split(/\s+/).filter((w) => w.length > 1);
+          if (words.length > 1) {
+            const conditions = words
+              .flatMap((w) => [`name.ilike.%${w}%`, `description.ilike.%${w}%`])
+              .join(",");
+            query = query.or(conditions);
+          } else {
+            query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+          }
         }
 
         switch (filters.sortBy) {
