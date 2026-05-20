@@ -611,6 +611,13 @@ function ShopPageContent() {
   const [cameraToastVisible, setCameraToastVisible] = useState(false);
   const [cameraToastMsg, setCameraToastMsg] = useState<string | undefined>();
 
+  const [fallbackCategoryKey, setFallbackCategoryKey] = useState<string>(() =>
+    searchParams.get("fallback") || ""
+  );
+  const [fallbackProducts, setFallbackProducts] = useState<ProductRow[]>([]);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+  const [fallbackLabel, setFallbackLabel] = useState<string>("");
+
   const initialCategory = useMemo(() => {
     return (searchParams.get("category") || "").toLowerCase();
   }, [searchParams]);
@@ -915,6 +922,31 @@ function ShopPageContent() {
     return () => observer.disconnect();
   }, [hasMore, loadProductsPage, loading, loadingMore]);
 
+  // Fallback: when search finds nothing, load products from the AI-detected category
+  useEffect(() => {
+    if (loading || !categoriesLoaded || !fallbackCategoryKey || !deferredSearch.trim() || products.length > 0) {
+      if (!loading && (products.length > 0 || !deferredSearch.trim())) setFallbackProducts([]);
+      return;
+    }
+    const normalized = normalizeCategoryKey(fallbackCategoryKey);
+    const cat = categories.find((c) => normalizeCategoryKey(c.slug) === normalized);
+    if (!cat) { setFallbackProducts([]); return; }
+    setFallbackLabel(cat.name);
+    setFallbackLoading(true);
+    supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("status", "approved")
+      .eq("is_active", true)
+      .eq("category_id", cat.id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data: rows }) => {
+        setFallbackProducts((rows ?? []).map(mapProductRow));
+        setFallbackLoading(false);
+      });
+  }, [loading, products.length, fallbackCategoryKey, deferredSearch, categoriesLoaded, categories]);
+
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
@@ -981,6 +1013,9 @@ function ShopPageContent() {
 
     return result;
   }, [products, deferredSearch, selectedCategory?.id, mobileCategory, filters.sortBy]);
+
+  const showingFallback = filteredProducts.length === 0 && fallbackProducts.length > 0 && deferredSearch.trim().length > 0;
+  const displayProducts = showingFallback ? fallbackProducts : filteredProducts;
 
   const prefetchProduct = useCallback((id: string) => {
     if (getCached(productCacheKey(id))) return; // already cached
@@ -1084,6 +1119,7 @@ function ShopPageContent() {
         const data = await res.json();
 
         if (res.ok && data.searchTerm) {
+          setFallbackCategoryKey(data.category ?? "");
           setCameraToastMsg(`✨ Searching for "${data.searchTerm}"`);
           setFilters((prev) => ({ ...prev, search: data.searchTerm, category: "" }));
           setMobileCategory("All");
@@ -1402,7 +1438,12 @@ function ShopPageContent() {
                 ))}
               </div>
             </>
-          ) : filteredProducts.length === 0 ? (
+          ) : displayProducts.length === 0 ? (
+            fallbackLoading ? (
+              <div className="flex justify-center py-16">
+                <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin" />
+              </div>
+            ) : (
             <div className="mx-4 md:mx-0 rounded-3xl bg-white border-2 border-dashed border-slate-300 p-12 md:p-20 text-center">
               <div className="w-28 h-28 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-8">
                 <Search className="w-12 h-12 text-slate-300" />
@@ -1418,10 +1459,16 @@ function ShopPageContent() {
                 Clear All Filters
               </button>
             </div>
+            )
           ) : (
             <>
+              {showingFallback && (
+                <div className="mx-4 mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800">
+                  No exact match found — showing similar products in <strong>{fallbackLabel}</strong>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 px-2 pt-2 md:hidden bg-[#f5f5f5]">
-                {filteredProducts.map((p) => {
+                {displayProducts.map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const isWishlisted = wishlist.has(p.id);
 
@@ -1445,7 +1492,7 @@ function ShopPageContent() {
                     : "grid-cols-1"
                 }`}
               >
-                {filteredProducts.map((p) => {
+                {displayProducts.map((p) => {
                   const qtyInCart = approvedQuantities[p.id] ?? 0;
                   const price = p.final_price_cents ?? p.price_cents ?? 0;
                   const originalPrice = p.price_cents;

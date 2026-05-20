@@ -2734,7 +2734,8 @@ function HomePageContent() {
 
       if (res.ok && data.searchTerm) {
         mobileToast.show(`✨ Searching for "${data.searchTerm}"`, "success");
-        router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}`);
+        const fallbackParam = data.category ? `&fallback=${encodeURIComponent(data.category)}` : "";
+        router.push(`/shop?q=${encodeURIComponent(data.searchTerm)}${fallbackParam}`);
       } else {
         mobileToast.show("Try a clearer photo or search by name", "info");
       }

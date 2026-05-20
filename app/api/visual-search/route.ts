@@ -34,12 +34,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 60,
+        max_tokens: 100,
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content:
-              "You identify products in photos. Return ONLY a short search term (1-4 words) for finding this product in an online store. Examples: 'Samsung Galaxy phone', 'Nike running shoes', 'baby diapers'. No extra text.",
+              'You identify products in photos. Return a JSON object with two fields: "searchTerm" (1-4 word product search term, e.g. "iPhone 14", "Nike running shoes") and "category" (one of exactly: phones, clothes, shoes, kids_clothes, home_appliances, wearables, bags, toys, laptops, mattress_bedding, audio, accessories, diapers_wipes). Example: {"searchTerm":"iPhone 14","category":"phones"}',
           },
           {
             role: "user",
@@ -67,9 +68,18 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
-    const searchTerm = data.choices?.[0]?.message?.content?.trim() ?? "";
+    const raw = data.choices?.[0]?.message?.content?.trim() ?? "{}";
+    let searchTerm = "";
+    let category = "";
+    try {
+      const parsed = JSON.parse(raw);
+      searchTerm = (parsed.searchTerm ?? "").trim();
+      category = (parsed.category ?? "").trim();
+    } catch {
+      searchTerm = raw;
+    }
 
-    return NextResponse.json({ searchTerm });
+    return NextResponse.json({ searchTerm, category });
   } catch (err) {
     console.error("[visual-search] unexpected error:", err);
     return NextResponse.json(
