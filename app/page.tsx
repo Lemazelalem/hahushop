@@ -391,6 +391,7 @@ function MSearchBar({
   onImageTap,
   selectedImage,
   onClearImage,
+  isSearching,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -398,6 +399,7 @@ function MSearchBar({
   onImageTap: () => void;
   selectedImage: string | null;
   onClearImage: () => void;
+  isSearching?: boolean;
 }) {
   return (
     <div
@@ -418,7 +420,12 @@ function MSearchBar({
       }}
     >
       <Search size={18} color="#0f172a" style={{ flexShrink: 0, marginRight: 8 }} />
-      {selectedImage ? (
+      {isSearching ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-800 rounded-full animate-spin" />
+          <span style={{ fontSize: 14, color: "#6b7280", fontFamily: "inherit" }}>Scanning photo…</span>
+        </div>
+      ) : selectedImage ? (
         <div
           style={{
             flex: 1,
@@ -2205,6 +2212,7 @@ function HomePageContent() {
   const [isBusinessAccount, setIsBusinessAccount] = useState(false);
   const [mobileCartCount, setMobileCartCount] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [cameraSearching, setCameraSearching] = useState(false);
   
   // Welcome modal state - show on first open only
   const [showWelcome, setShowWelcome] = useState(false);
@@ -2721,6 +2729,7 @@ function HomePageContent() {
 
     try {
       mobileToast.show("📸 Looking up your product…", "info");
+      setCameraSearching(true);
       const base64 = await resizeImage(file);
       setSelectedImage(base64);
 
@@ -2742,6 +2751,8 @@ function HomePageContent() {
     } catch (err) {
       console.error("Visual search error:", err);
       mobileToast.show("Try again or search by name", "info");
+    } finally {
+      setCameraSearching(false);
     }
   }
 
@@ -2827,6 +2838,7 @@ function HomePageContent() {
                     sessionStorage.removeItem("shopease_visual_search_image");
                     sessionStorage.removeItem("shopease_visual_search_name");
                   }}
+                  isSearching={cameraSearching}
                 />
               </div>
 

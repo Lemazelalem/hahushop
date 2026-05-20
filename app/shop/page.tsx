@@ -282,11 +282,13 @@ function MobileSearchBar({
   onChange,
   onSubmit,
   onImageTap,
+  isSearching,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
   onImageTap: () => void;
+  isSearching?: boolean;
 }) {
   return (
     <div
@@ -304,6 +306,12 @@ function MobileSearchBar({
       }}
     >
       <Search size={18} color="#0f172a" style={{ flexShrink: 0, marginRight: 8 }} />
+      {isSearching ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-800 rounded-full animate-spin" />
+          <span style={{ fontSize: 14, color: "#6b7280", fontFamily: "inherit" }}>Scanning photo…</span>
+        </div>
+      ) : (
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -321,7 +329,8 @@ function MobileSearchBar({
           minWidth: 0,
         }}
       />
-      {value ? (
+      )}
+      {!isSearching && value ? (
         <button
           onClick={() => onChange("")}
           aria-label="Clear"
@@ -338,7 +347,7 @@ function MobileSearchBar({
         >
           <X size={16} color="#6b7280" />
         </button>
-      ) : (
+      ) : !isSearching ? (
         <button
           onClick={onImageTap}
           aria-label="Search by image"
@@ -355,7 +364,7 @@ function MobileSearchBar({
         >
           <Camera size={18} color="#0f172a" />
         </button>
-      )}
+      ) : null}
       <button
         onClick={onSubmit}
         aria-label="Submit search"
@@ -611,6 +620,7 @@ function ShopPageContent() {
   const [cameraToastVisible, setCameraToastVisible] = useState(false);
   const [cameraToastMsg, setCameraToastMsg] = useState<string | undefined>();
 
+  const [cameraSearching, setCameraSearching] = useState(false);
   const [fallbackCategoryKey, setFallbackCategoryKey] = useState<string>(() =>
     searchParams.get("fallback") || ""
   );
@@ -1108,6 +1118,7 @@ function ShopPageContent() {
 
       setCameraToastMsg(undefined);
       setCameraToastVisible(true);
+      setCameraSearching(true);
 
       try {
         const base64 = await resizeImage(file);
@@ -1131,6 +1142,8 @@ function ShopPageContent() {
       } catch {
         setCameraToastMsg("Try again or search by name");
         setTimeout(() => setCameraToastVisible(false), 2200);
+      } finally {
+        setCameraSearching(false);
       }
     },
     []
@@ -1343,6 +1356,7 @@ function ShopPageContent() {
             onChange={(v) => setFilters((prev) => ({ ...prev, search: v }))}
             onSubmit={() => {}}
             onImageTap={() => cameraInputRef.current?.click()}
+            isSearching={cameraSearching}
           />
         </div>
 
