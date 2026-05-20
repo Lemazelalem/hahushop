@@ -962,12 +962,24 @@ function ShopPageContent() {
 
     if (deferredSearch.trim()) {
       const q = deferredSearch.trim().toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.description ?? "").toLowerCase().includes(q) ||
-          (p.category_name ?? "").toLowerCase().includes(q)
-      );
+      const words = q.split(/\s+/).filter((w) => w.length > 1);
+      if (words.length > 1) {
+        result = result.filter((p) =>
+          words.some(
+            (w) =>
+              p.name.toLowerCase().includes(w) ||
+              (p.description ?? "").toLowerCase().includes(w) ||
+              (p.category_name ?? "").toLowerCase().includes(w)
+          )
+        );
+      } else {
+        result = result.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            (p.description ?? "").toLowerCase().includes(q) ||
+            (p.category_name ?? "").toLowerCase().includes(q)
+        );
+      }
     }
 
     if (selectedCategory?.id) {
