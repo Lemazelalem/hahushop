@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { setCached, getCached, productCacheKey } from "@/lib/productCache";
 import { useMiniCart } from "@/components/MiniCartProvider";
+import { useResumeRefresh, useLoadingTimeout } from "./_useResumeRefresh";
 import {
   Search,
   ShoppingCart,
@@ -702,6 +703,16 @@ function ShopPageContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Resume-from-background recovery — see app/shop/_useResumeRefresh.ts
+  useResumeRefresh(() => {
+    requestIdRef.current += 1;
+    setLoading(true);
+    setProducts([]);
+    try { localStorage.removeItem(SHOP_FEED_CACHE_KEY); } catch { /* ignore */ }
+    setCategoriesLoaded(false);
+    setTimeout(() => setCategoriesLoaded(true), 0);
+  });
+
   // Sync URL filters when navigated with ?q= or ?category= params.
   useEffect(() => {
     setFilters((prev) => {
@@ -877,6 +888,12 @@ function ShopPageContent() {
     },
     [deferredSearch, feedSignature, filters.sortBy, selectedCategory?.id]
   );
+
+  // Safety net: if loading is stuck for >12s, surface an error and unblock the UI.
+  useLoadingTimeout(loading, () => {
+    setLoading(false);
+    setPageError("Loading timed out. Tap Retry to try again.");
+  });
 
   useEffect(() => {
     if (!categoriesLoaded) return;
@@ -1421,10 +1438,23 @@ function ShopPageContent() {
             <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
               <X className="w-5 h-5" />
             </div>
-            <div>
+            <div className="flex-1">
               <div className="text-sm font-bold">Error loading products</div>
               <div className="text-xs font-normal text-rose-600">{pageError}</div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPageError(null);
+                setProducts([]);
+                try { localStorage.removeItem(SHOP_FEED_CACHE_KEY); } catch { /* ignore */ }
+                setCategoriesLoaded(false);
+                setTimeout(() => setCategoriesLoaded(true), 0);
+              }}
+              className="shrink-0 text-xs font-bold bg-rose-600 text-white px-3 py-1.5 rounded-lg"
+            >
+              Retry
+            </button>
           </div>
         )}
 
