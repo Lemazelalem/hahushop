@@ -783,7 +783,7 @@ function LandingPage({
                 Live organization details will appear here as soon as approved Hahu Business applications are available.
               </div>
             ) : (
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-5 divide-y divide-white/[0.07]">
                 {selectedFact.items.map((item) => {
                   const badges = factHighlights(selectedFact.key, item);
                   const statusClasses =
@@ -794,29 +794,27 @@ function LandingPage({
                   return (
                     <div
                       key={`${selectedFact.key}-${item.orgName}`}
-                      className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                      className="flex items-center justify-between gap-4 py-3"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-white">{item.orgName}</div>
-                          <div className="mt-1 text-xs text-slate-300/65">
-                            {item.orgType || "Organization"}
-                          </div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-1.5 w-1.5 rounded-full bg-white/30 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium text-white">{item.orgName}</span>
+                          <span className="ml-2 text-xs text-slate-400">{item.orgType || "Organization"}</span>
                         </div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses}`}>
-                          {item.status === "approved" ? "Approved" : "Onboarding"}
-                        </span>
                       </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {badges.map((badge, idx) => (
                           <span
                             key={`${item.orgName}-${selectedFact.key}-${idx}`}
-                            className="rounded-full border border-white/10 bg-slate-950/25 px-2.5 py-1 text-[11px] font-medium text-slate-200/85"
+                            className="text-[11px] font-medium text-slate-300/70"
                           >
                             {badge}
                           </span>
                         ))}
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClasses}`}>
+                          {item.status === "approved" ? "Approved" : "Onboarding"}
+                        </span>
                       </div>
                     </div>
                   );
