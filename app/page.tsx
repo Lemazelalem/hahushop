@@ -285,32 +285,19 @@ function MHeader({
             gap: 2,
           }}
         >
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span
-              style={{
-                fontSize: 22,
-                fontWeight: 900,
-                letterSpacing: "-0.6px",
-                fontFamily: "inherit",
-                lineHeight: 1,
-                background: "linear-gradient(90deg,#A3E635,#38BDF8)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              HahuShop
-            </span>
-            {/* TEST MARKER: red circle to verify live deploy — remove after test */}
-            <span
-              style={{
-                width: 12,
-                height: 12,
-                borderRadius: "50%",
-                background: "#ef4444",
-                display: "inline-block",
-                flexShrink: 0,
-              }}
-            />
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 900,
+              letterSpacing: "-0.6px",
+              fontFamily: "inherit",
+              lineHeight: 1,
+              background: "linear-gradient(90deg,#A3E635,#38BDF8)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            HahuShop
           </span>
 
           <span
