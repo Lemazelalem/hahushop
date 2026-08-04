@@ -405,6 +405,8 @@ export default function SellerDashboardPage() {
 
     for (const item of rawItems) {
       if (item.orders?.status === "cancelled") continue;
+      // Failed payments must not count as recorded/pending revenue
+      if (item.orders?.payment_status === "failed") continue;
       const sellerCents =
         (item.seller_price_cents ?? 0) * Math.max(0, Number(item.quantity ?? 0));
       if (sellerCents <= 0) continue;
@@ -762,7 +764,7 @@ export default function SellerDashboardPage() {
 
   const formatMoney = (cents: number | null | undefined) => {
     if (!cents && cents !== 0) return "—";
-    return `$${(cents / 100).toFixed(2)}`;
+    return `ETB ${(cents / 100).toFixed(2)}`;
   };
 
   const formatDate = (iso: string | null) => {
@@ -1514,11 +1516,11 @@ export default function SellerDashboardPage() {
             <div className="glass-morphism rounded-2xl p-5 border-l-4 border-blue-400">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Next Payout</p>
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Last Payment</p>
                   <p className="text-2xl font-bold text-blue-900 mt-1">
                     {payoutTotals.lastPayoutAt ? formatRelativeTime(payoutTotals.lastPayoutAt) : "—"}
                   </p>
-                  <p className="text-xs text-blue-600 mt-1">Last payment received</p>
+                  <p className="text-xs text-blue-600 mt-1">Most recent paid order</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
                   <Calendar className="w-6 h-6 text-blue-600" />
@@ -2436,10 +2438,16 @@ export default function SellerDashboardPage() {
                           className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                             sale.order_payment_status === "paid"
                               ? "bg-emerald-100 text-emerald-700"
+                              : sale.order_payment_status === "failed"
+                              ? "bg-rose-100 text-rose-700"
                               : "bg-amber-100 text-amber-700"
                           }`}
                         >
-                          {sale.order_payment_status === "paid" ? "Paid" : "Pending"}
+                          {sale.order_payment_status === "paid"
+                            ? "Paid"
+                            : sale.order_payment_status === "failed"
+                            ? "Failed"
+                            : "Pending"}
                         </span>
                         <p className="text-[10px] text-slate-400 mt-1">
                           {formatRelativeTime(sale.order_created_at)}
@@ -2764,9 +2772,13 @@ export default function SellerDashboardPage() {
                         </p>
                       </div>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                        sale.order_payment_status === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                        sale.order_payment_status === "paid" ? "bg-emerald-100 text-emerald-700"
+                          : sale.order_payment_status === "failed" ? "bg-rose-100 text-rose-700"
+                          : "bg-amber-100 text-amber-700"
                       }`}>
-                        {sale.order_payment_status === "paid" ? "Paid" : "Pending"}
+                        {sale.order_payment_status === "paid" ? "Paid"
+                          : sale.order_payment_status === "failed" ? "Failed"
+                          : "Pending"}
                       </span>
                     </div>
                   ))}

@@ -23,7 +23,7 @@ type PayoutRow = {
 
 function formatMoney(cents: number | null | undefined) {
   if (!cents || cents <= 0) return "—";
-  return `$${(cents / 100).toFixed(2)}`;
+  return `ETB ${(cents / 100).toFixed(2)}`;
 }
 
 function formatDate(dateStr: string | null | undefined) {

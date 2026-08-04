@@ -64,12 +64,15 @@ export async function GET() {
 
     // Fetch recent orders with cart_snapshot — same as admin approach.
     // Service role bypasses orders RLS (which only allows the buyer to read their own orders).
+    // JSONB containment narrows to orders containing this seller's items so the
+    // 200-order cap applies per seller, not marketplace-wide (kept lifetime totals correct).
     step = "orders-query";
     const { data: orders, error: ordersErr } = await db
       .from("orders")
       .select(
         "id, created_at, status, payment_status, shipping_full_name, shipping_phone, shipping_city, shipping_region, cart_snapshot"
       )
+      .contains("cart_snapshot", { items: [{ seller_id: sellerId }] })
       .order("created_at", { ascending: false })
       .limit(200);
 
