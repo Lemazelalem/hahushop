@@ -2431,9 +2431,26 @@ function HomePageContent() {
       }
     } catch { /* ignore corrupt cache */ }
 
+    // A frozen TWA tab can kill in-flight fetches without rejecting them,
+    // leaving the page blank forever — give every query a hard timeout.
+    const QUERY_TIMEOUT_MS = 12_000;
+    type SettledRes = { data: any[] | null; error: unknown };
+    const settle = (q: PromiseLike<any>): Promise<SettledRes> =>
+      Promise.race([
+        Promise.resolve(q),
+        new Promise<SettledRes>((res) =>
+          setTimeout(() => res({ data: null, error: new Error("timeout") }), QUERY_TIMEOUT_MS)
+        ),
+      ]).catch(() => ({ data: null, error: new Error("network") }));
+
+    let inFlight = false;
+    let lastLoadOk = 0;
+
     // Fetch fresh data in background
     async function loadAll() {
-      const mobileFeedPromise = Promise.resolve(
+      if (inFlight) return;
+      inFlight = true;
+      const mobileFeedPromise = settle(
         supabase
           .from("products")
           .select(PRODUCT_FIELDS)
@@ -2459,25 +2476,25 @@ function HomePageContent() {
         exploreRes,
         mobileFeedRes,
       ] = await Promise.all([
-        supabase
+        settle(supabase
           .from("categories")
           .select("id,name,slug")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
-        supabase
+          .order("name", { ascending: true })),
+        settle(supabase
           .from("hero_slides")
           .select("id,title,tagline,image_url,link_url")
           .eq("is_active", true)
           .eq("is_archived", false)
-          .order("sort_order", { ascending: true }),
-        supabase
+          .order("sort_order", { ascending: true })),
+        settle(supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
           .eq("is_active", true)
           .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
+          .limit(8)),
+        settle(supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
@@ -2486,8 +2503,8 @@ function HomePageContent() {
           .not("final_price_cents", "is", null)
           .gt("price_cents", 0)
           .gt("final_price_cents", 0)
-          .limit(50),
-        supabase
+          .limit(50)),
+        settle(supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
@@ -2495,24 +2512,27 @@ function HomePageContent() {
           .gt("rating_count", 0)
           .order("rating_avg", { ascending: false })
           .order("rating_count", { ascending: false })
-          .limit(8),
-        supabase
+          .limit(8)),
+        settle(supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
           .eq("is_active", true)
           .gt("rating_count", 10)
           .order("rating_avg", { ascending: false })
-          .limit(8),
-        supabase
+          .limit(8)),
+        settle(supabase
           .from("products")
           .select(PRODUCT_FIELDS)
           .eq("status", "approved")
           .eq("is_active", true)
           .order("created_at", { ascending: false })
-          .range(8, 32),
+          .range(8, 32)),
         mobileFeedPromise,
       ]);
+      inFlight = false;
+      const anyError = [catRes, heroRes, newRes, dealsRes, topRes, topPicksRes, exploreRes, mobileFeedRes].some((r) => r.error);
+      if (!anyError) lastLoadOk = Date.now();
 
       // Categories
       if (!catRes.error && catRes.data) {
@@ -2526,19 +2546,23 @@ function HomePageContent() {
       }
       setLoadingCategories(false);
 
-      // Hero slides
-      setHeroSlides(
-        heroRes.data?.length
-          ? heroRes.data
-          : [
-              { id: "1", title: "New Arrivals", tagline: "Check out the latest trends", image_url: null, link_url: "/shop" },
-              { id: "2", title: "Summer Sale", tagline: "Up to 50% off", image_url: null, link_url: "/shop" },
-            ]
-      );
+      // Hero slides — keep existing (cached) slides when the fetch failed
+      if (heroRes.data?.length) {
+        setHeroSlides(heroRes.data);
+      } else if (!heroRes.error) {
+        setHeroSlides((prev) =>
+          prev.length
+            ? prev
+            : [
+                { id: "1", title: "New Arrivals", tagline: "Check out the latest trends", image_url: null, link_url: "/shop" },
+                { id: "2", title: "Summer Sale", tagline: "Up to 50% off", image_url: null, link_url: "/shop" },
+              ]
+        );
+      }
 
       // New arrivals
       const newMapped = (newRes.data ?? []).map(mapProduct);
-      setNewArrivals(newMapped);
+      if (!newRes.error) setNewArrivals(newMapped);
       setLoadingNew(false);
 
       // Deals
@@ -2556,28 +2580,29 @@ function HomePageContent() {
             discountPct(a.original_price_cents, a.final_price_cents)
         )
         .slice(0, 8);
-      setDeals(dealRows);
+      if (!dealsRes.error) setDeals(dealRows);
       setLoadingDeals(false);
 
       // Top rated
       const topMapped = (topRes.data ?? []).map(mapProduct);
-      setTopRated(topMapped);
+      if (!topRes.error) setTopRated(topMapped);
       setLoadingTop(false);
 
       // Top picks
       const topPicksMapped = (topPicksRes.data ?? []).map(mapProduct);
-      setTopPicks(topPicksMapped);
+      if (!topPicksRes.error) setTopPicks(topPicksMapped);
       setLoadingTopPicks(false);
 
       // Explore
       const exploreMapped = (exploreRes.data ?? []).map(mapProduct);
-      setExplore(exploreMapped);
+      if (!exploreRes.error) setExplore(exploreMapped);
       setLoadingExplore(false);
 
       const mobileFeedMapped = (mobileFeedRes.data ?? []).map(mapProduct);
 
-      // Cache for instant load next visit
-      try {
+      // Cache for instant load next visit — only when every section loaded,
+      // so a partial/failed load never overwrites a good cache
+      if (!anyError) try {
         localStorage.setItem("hahu-home-cache", JSON.stringify({
           categories: catRes.data ?? [],
           hero: heroRes.data ?? [],
@@ -2593,6 +2618,15 @@ function HomePageContent() {
     }
 
     loadAll();
+
+    // TWA/PWA resume: reopening the app often resumes a frozen tab instead of
+    // remounting — refetch when it becomes visible again and data is stale/failed.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastLoadOk > 60_000) loadAll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   const {
