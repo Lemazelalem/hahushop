@@ -569,7 +569,13 @@ export default function SellerProductDetailPage() {
   }, [productId]);
 
   // ── Image upload helper ───────────────────────────────────────────────────
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB — same limits as the create page
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
   async function uploadFile(file: File, path: string): Promise<string | null> {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type) || file.size > MAX_FILE_SIZE) {
+      return null;
+    }
     const { error } = await supabase.storage
       .from("product-images")
       .upload(path, file);
@@ -589,7 +595,7 @@ export default function SellerProductDetailPage() {
         setImageUrl(url);
         setIsDirty(true);
       } else {
-        setImageError("Upload failed.");
+        setImageError("Upload failed. Use PNG/JPG/WebP/GIF under 5MB.");
       }
     } catch (err: any) {
       setImageError(prettyError(err));
@@ -839,8 +845,10 @@ export default function SellerProductDetailPage() {
           category_id: categoryId,
           branch_slug: branchSlug || null,
           product_type_slug: productTypeSlug || null,
+          // Seller edits change only the seller's price. final_price_cents and
+          // public_employee_price_cents are admin-controlled (set at approval).
           price_cents: cents,
-          final_price_cents: cents,
+          seller_price_cents: cents,
           image_url: imageUrl,
           extra_image_urls: extraUrls.length ? extraUrls : null,
           stock_quantity: stock,
