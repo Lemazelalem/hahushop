@@ -227,9 +227,6 @@ export default function MobileHeader({
           }}
         >
           {/* Logo */}
-          <div style={{ position: "relative", display: "inline-flex" }}>
-            {/* DEV-MARKER: red dot — remove this div when done */}
-            <span style={{ position: "absolute", top: -4, right: -6, width: 10, height: 10, borderRadius: "50%", background: "#ef4444", zIndex: 10 }} />
           <button
             onClick={onLogoTap}
             style={{
@@ -272,7 +269,6 @@ export default function MobileHeader({
               Ethiopia
             </span>
           </button>
-          </div>
 
           {/* Account + Cart */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

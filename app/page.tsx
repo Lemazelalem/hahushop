@@ -272,9 +272,6 @@ function MHeader({
           minHeight: 52,
         }}
       >
-        {/* DEV-MARKER: remove wrapper div + span when done */}
-        <div style={{ position: "relative", display: "inline-flex" }}>
-          <span style={{ position: "absolute", top: -4, right: -6, width: 10, height: 10, borderRadius: "50%", background: "#ef4444", zIndex: 10 }} />
         <button
           onClick={onLogoTap}
           style={{
@@ -317,7 +314,6 @@ function MHeader({
             ETHIOPIA ኢትዮጵያ
           </span>
         </button>
-        </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <button
