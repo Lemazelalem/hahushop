@@ -51,3 +51,7 @@ public/fallback-*.js.map
 next-env.d.ts
 
 .vercel
+
+# local one-off diagnostic/maintenance scripts (may contain secrets — never commit)
+_*.js
+_*.txt
