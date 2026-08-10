@@ -104,9 +104,9 @@ function BarChart({ data }: { data: MonthlySpend[] }) {
   const max = Math.max(...data.map((d) => d.total_cents), 1);
 
   return (
-    <div className="flex items-end gap-1.5 h-28">
+    <div className="flex items-end gap-1 h-24">
       {data.map((d, i) => {
-        const h = Math.max(d.total_cents > 0 ? 5 : 0, (d.total_cents / max) * 100);
+        const h = Math.max(4, (d.total_cents / max) * 100);
         const isCurrentMonth = i === data.length - 1;
 
         return (
@@ -114,11 +114,11 @@ function BarChart({ data }: { data: MonthlySpend[] }) {
             key={`${d.month}-${d.year}`}
             className="flex-1 flex flex-col items-center gap-1 group relative"
           >
-            {/* Hover tooltip */}
-            <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-semibold px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+            {/* Tooltip */}
+            <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] font-semibold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
               {moneyCompact(d.total_cents)}
               <br />
-              <span className="text-slate-400 font-normal">
+              <span className="text-gray-400 font-normal">
                 {d.order_count} order{d.order_count !== 1 ? "s" : ""}
               </span>
             </div>
@@ -126,16 +126,13 @@ function BarChart({ data }: { data: MonthlySpend[] }) {
             {/* Bar */}
             <div className="w-full flex-1 flex items-end">
               <div
-                className={`w-full rounded-t transition-all duration-500 ${
-                  isCurrentMonth ? "bg-emerald-500 hover:bg-emerald-400" :
-                  d.total_cents > 0 ? "bg-slate-300 hover:bg-slate-400" : "bg-slate-100"
-                }`}
+                className={`w-full rounded-t transition-all duration-500 ${isCurrentMonth ? 'bg-green-600' : d.total_cents > 0 ? 'bg-gray-300' : 'bg-gray-100'}`}
                 style={{ height: `${h}%` }}
               />
             </div>
 
             {/* Label */}
-            <span className={`text-[9px] font-semibold ${isCurrentMonth ? "text-emerald-600" : "text-slate-400"}`}>
+            <span className={`text-[9px] font-semibold ${isCurrentMonth ? 'text-green-700' : 'text-gray-400'}`}>
               {d.month}
             </span>
           </div>
