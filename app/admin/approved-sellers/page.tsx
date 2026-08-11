@@ -136,6 +136,15 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+const AVATAR_TONES = [
+  "from-sky-100 to-sky-200 text-sky-700",
+  "from-emerald-100 to-emerald-200 text-emerald-700",
+  "from-violet-100 to-violet-200 text-violet-700",
+  "from-amber-100 to-amber-200 text-amber-700",
+  "from-rose-100 to-rose-200 text-rose-700",
+  "from-teal-100 to-teal-200 text-teal-700",
+];
+
 export default function AdminApprovedSellersPage() {
   const router = useRouter();
 
@@ -145,6 +154,7 @@ export default function AdminApprovedSellersPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expandedSellerId, setExpandedSellerId] = useState<string | null>(null);
+  const [expandedTab, setExpandedTab] = useState<"products" | "top" | "stock">("products");
 
   const [sellers, setSellers] = useState<SellerProfile[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
@@ -493,316 +503,384 @@ export default function AdminApprovedSellersPage() {
 
   return (
     <main className="py-4 md:py-6 space-y-4">
-      {/* Compact header */}
-      <section className="glass glass-ring rounded-[28px] p-5 md:p-6">
-        <div className="flex items-start justify-between gap-4">
+      {/* Dark hero header */}
+      <section className="relative overflow-hidden rounded-[28px] bg-slate-900 p-5 md:p-6 shadow-xl shadow-slate-900/20">
+        <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-10 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
+
+        <div className="relative flex items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Admin</div>
-            <h1 className="text-2xl font-bold text-slate-900 mt-0.5">Approved Sellers</h1>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Admin · Marketplace</div>
+            <h1 className="mt-0.5 text-2xl font-bold text-white">Approved Sellers</h1>
+            <p className="mt-1 text-xs text-slate-400">
+              {sellerSummaries.length} seller{sellerSummaries.length === 1 ? "" : "s"} · sales, payouts & inventory at a glance
+            </p>
           </div>
           <button
             onClick={() => router.push("/admin")}
-            className="pill px-4 py-1.5 text-sm font-semibold text-slate-900 shrink-0"
+            className="shrink-0 rounded-xl border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
           >
             Back to Admin
           </button>
         </div>
 
-        {/* Compact summary strip */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-          <span className="font-semibold text-slate-900">{sellerSummaries.length} sellers</span>
-          <span className="text-slate-500">
-            Today <span className="font-semibold text-slate-800">{moneyCompact(totals.dailySalesCents)}</span>
-          </span>
-          <span className="text-slate-500">
-            7d <span className="font-semibold text-slate-800">{moneyCompact(totals.weeklySalesCents)}</span>
-          </span>
-          <span className="text-slate-500">
-            Month <span className="font-semibold text-slate-800">{moneyCompact(totals.monthlySalesCents)}</span>
-          </span>
-          {totals.pendingPaymentCents > 0 && (
-            <span className="text-amber-700">
-              Pending pay <span className="font-semibold">{moneyCompact(totals.pendingPaymentCents)}</span>
-            </span>
-          )}
-          {totals.pendingPayoutCents > 0 && (
-            <span className="text-rose-700">
-              Pending payout <span className="font-semibold">{moneyCompact(totals.pendingPayoutCents)}</span>
-            </span>
-          )}
-          {(totals.outOfStockCount + totals.lowStockCount) > 0 && (
-            <span className="text-rose-600">
-              {totals.outOfStockCount} out · {totals.lowStockCount} low stock
-            </span>
-          )}
+        {/* KPI tiles */}
+        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            { label: "Today", value: moneyCompact(totals.dailySalesCents), tone: "text-white" },
+            { label: "7 days", value: moneyCompact(totals.weeklySalesCents), tone: "text-white" },
+            { label: "This month", value: moneyCompact(totals.monthlySalesCents), tone: "text-white" },
+            {
+              label: "Pending pay",
+              value: moneyCompact(totals.pendingPaymentCents),
+              tone: totals.pendingPaymentCents > 0 ? "text-amber-300" : "text-white/40",
+            },
+            {
+              label: "Pending payout",
+              value: moneyCompact(totals.pendingPayoutCents),
+              tone: totals.pendingPayoutCents > 0 ? "text-rose-300" : "text-white/40",
+            },
+            {
+              label: "Stock issues",
+              value: `${totals.outOfStockCount + totals.lowStockCount}`,
+              sub: `${totals.outOfStockCount} out · ${totals.lowStockCount} low`,
+              tone: totals.outOfStockCount + totals.lowStockCount > 0 ? "text-rose-300" : "text-white/40",
+            },
+          ].map(({ label, value, sub, tone }) => (
+            <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+              <div className={`mt-0.5 truncate text-base font-bold tabular-nums ${tone}`}>{value}</div>
+              {sub && <div className="mt-0.5 text-[10px] text-slate-500">{sub}</div>}
+            </div>
+          ))}
         </div>
 
-        <div className="mt-4">
+        {/* Search */}
+        <div className="relative mt-4">
+          <svg className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+          </svg>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or phone..."
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300"
+            className="w-full rounded-2xl border border-white/10 bg-white/95 py-2.5 pl-11 pr-24 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:bg-white"
           />
+          {search.trim() && (
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">
+              {filteredSellers.length} match{filteredSellers.length === 1 ? "" : "es"}
+            </span>
+          )}
         </div>
       </section>
 
       {pageError && (
-        <div className="glass glass-ring rounded-[24px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {pageError}
         </div>
       )}
 
       {loading ? (
-        <div className="glass glass-ring rounded-[28px] p-8 text-center text-sm text-slate-500">
-          Loading seller data...
+        <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
+            <div className="text-sm text-slate-500">Loading seller data...</div>
+          </div>
         </div>
       ) : filteredSellers.length === 0 ? (
-        <div className="glass glass-ring rounded-[28px] p-10 text-center">
-          <div className="text-lg font-bold text-slate-900">No sellers found</div>
+        <div className="rounded-[28px] border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+            <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+          </div>
+          <div className="mt-3 text-lg font-bold text-slate-900">No sellers found</div>
           <div className="mt-1 text-sm text-slate-500">
             Try a different search or approve seller documents first.
           </div>
         </div>
       ) : (
-        <section className="glass glass-ring rounded-[28px] divide-y divide-slate-100 overflow-hidden">
-          {filteredSellers.map((seller) => {
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          {/* Desktop column header */}
+          <div className="hidden border-b border-slate-100 bg-slate-50/80 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 md:grid md:grid-cols-[minmax(0,1fr)_88px_88px_112px_44px] md:items-center md:gap-3">
+            <span>Seller</span>
+            <span className="text-right">Today</span>
+            <span className="text-right">7 days</span>
+            <span className="text-right">This month</span>
+            <span aria-hidden />
+          </div>
+          <div className="divide-y divide-slate-100">
+          {filteredSellers.map((seller, idx) => {
             const expanded = expandedSellerId === seller.id;
+            const avatarTone = AVATAR_TONES[seller.name.charCodeAt(0) % AVATAR_TONES.length];
+            const maxSales = Math.max(seller.dailySalesCents, seller.weeklySalesCents, seller.monthlySalesCents, 1);
 
             return (
-              <article key={seller.id}>
-                {/* Compact collapsed row */}
-                <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-semibold text-slate-900 text-sm">{seller.name}</span>
-                      <span className="text-xs text-slate-400">{seller.contact}</span>
-                      {seller.pendingPaymentCents > 0 && (
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          pay pending
-                        </span>
-                      )}
-                      {seller.outOfStockCount > 0 && (
-                        <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                          {seller.outOfStockCount} out of stock
-                        </span>
-                      )}
-                      {seller.lowStockCount > 0 && (
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          {seller.lowStockCount} low stock
+              <article key={seller.id} className={expanded ? "bg-slate-50/50" : undefined}>
+                {/* Collapsed row */}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors hover:bg-slate-50/60 md:grid-cols-[minmax(0,1fr)_88px_88px_112px_44px] md:gap-3 md:px-5">
+                  {/* Identity */}
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-bold ${avatarTone}`}>
+                      {seller.name.charAt(0).toUpperCase()}
+                      {idx < 3 && seller.monthlySalesCents > 0 && (
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[8px] font-bold text-white ring-2 ring-white">
+                          {idx + 1}
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-500">
-                      {seller.approvedProducts > 0 && (
-                        <span className="text-emerald-700 font-medium">{seller.approvedProducts} live</span>
-                      )}
-                      {seller.submittedProducts > 0 && (
-                        <span className="text-sky-700 font-medium">{seller.submittedProducts} pending</span>
-                      )}
-                      {seller.delistedProducts > 0 && (
-                        <span className="text-slate-400">{seller.delistedProducts} delisted</span>
-                      )}
-                      {seller.totalProducts === 0 && (
-                        <span className="text-slate-400">No products</span>
-                      )}
-                      <span className="text-slate-300">·</span>
-                      <span>
-                        Month{" "}
-                        <span className="font-semibold text-slate-700">
-                          {moneyCompact(seller.monthlySalesCents)}
-                        </span>{" "}
-                        <span className="text-slate-400">({seller.monthlyOrders} orders)</span>
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-slate-900">{seller.name}</span>
+                        {seller.pendingPaymentCents > 0 && (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">pay due</span>
+                        )}
+                        {seller.outOfStockCount > 0 && (
+                          <span className="shrink-0 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">{seller.outOfStockCount} out</span>
+                        )}
+                        {seller.lowStockCount > 0 && (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">{seller.lowStockCount} low</span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-slate-400">
+                        <span>{seller.contact}</span>
+                        <span className="mx-1 text-slate-300">·</span>
+                        {seller.totalProducts === 0 ? (
+                          <span>No products</span>
+                        ) : (
+                          <>
+                            {seller.approvedProducts > 0 && (
+                              <span className="font-medium text-emerald-600">{seller.approvedProducts} live</span>
+                            )}
+                            {seller.submittedProducts > 0 && (
+                              <>
+                                {seller.approvedProducts > 0 && <span className="mx-1 text-slate-300">·</span>}
+                                <span className="font-medium text-sky-600">{seller.submittedProducts} pending</span>
+                              </>
+                            )}
+                            {seller.delistedProducts > 0 && (
+                              <>
+                                {(seller.approvedProducts > 0 || seller.submittedProducts > 0) && (
+                                  <span className="mx-1 text-slate-300">·</span>
+                                )}
+                                <span>{seller.delistedProducts} delisted</span>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Desktop metrics */}
+                  <div className="hidden text-right md:block">
+                    <div className={`text-[13px] font-semibold tabular-nums ${seller.dailySalesCents > 0 ? "text-slate-800" : "text-slate-300"}`}>
+                      {moneyCompact(seller.dailySalesCents)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{seller.dailyOrders} orders</div>
+                  </div>
+                  <div className="hidden text-right md:block">
+                    <div className={`text-[13px] font-semibold tabular-nums ${seller.weeklySalesCents > 0 ? "text-slate-800" : "text-slate-300"}`}>
+                      {moneyCompact(seller.weeklySalesCents)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{seller.weeklyOrders} orders</div>
+                  </div>
+                  <div className="hidden text-right md:block">
+                    <div className={`text-[13px] font-bold tabular-nums ${seller.monthlySalesCents > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                      {moneyCompact(seller.monthlySalesCents)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{seller.monthlyOrders} orders</div>
+                  </div>
+
+                  {/* Expand toggle */}
                   <button
-                    onClick={() => setExpandedSellerId(expanded ? null : seller.id)}
-                    className="shrink-0 text-xs font-semibold text-slate-600 border border-slate-200 bg-white rounded-xl px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                    onClick={() => {
+                      setExpandedSellerId(expanded ? null : seller.id);
+                      setExpandedTab("products");
+                    }}
+                    aria-expanded={expanded}
+                    aria-label={expanded ? `Hide ${seller.name} details` : `Show ${seller.name} details`}
+                    className="flex h-8 w-8 items-center justify-center justify-self-end rounded-full border border-slate-200 bg-white text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-700"
                   >
-                    {expanded ? "Hide ↑" : "Details ↓"}
+                    <svg
+                      className={`h-4 w-4 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
+
+                  {/* Mobile metrics strip */}
+                  <div className="col-span-2 flex items-center gap-3 pl-[46px] text-[11px] text-slate-500 md:hidden">
+                    <span>
+                      Today <span className="font-semibold text-slate-700">{moneyCompact(seller.dailySalesCents)}</span>
+                    </span>
+                    <span>
+                      7d <span className="font-semibold text-slate-700">{moneyCompact(seller.weeklySalesCents)}</span>
+                    </span>
+                    <span>
+                      Mo <span className="font-semibold text-slate-900">{moneyCompact(seller.monthlySalesCents)}</span>{" "}
+                      <span className="text-slate-400">({seller.monthlyOrders})</span>
+                    </span>
+                  </div>
                 </div>
 
                 {/* Expanded panel */}
                 {expanded && (
-                  <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4 space-y-3">
-                    {/* Compact 6-cell financials grid */}
-                    <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 text-center">
-                      {[
-                        {
-                          label: "Today",
-                          value: moneyCompact(seller.dailySalesCents),
-                          sub: `${seller.dailyOrders} orders`,
-                          cls: "bg-white border-slate-200 text-slate-900",
-                        },
-                        {
-                          label: "7 Days",
-                          value: moneyCompact(seller.weeklySalesCents),
-                          sub: `${seller.weeklyOrders} orders`,
-                          cls: "bg-white border-slate-200 text-slate-900",
-                        },
-                        {
-                          label: "Month",
-                          value: moneyCompact(seller.monthlySalesCents),
-                          sub: `${seller.monthlyOrders} orders`,
-                          cls: "bg-white border-slate-200 text-slate-900",
-                        },
-                        {
-                          label: "Pending Pay",
-                          value: moneyCompact(seller.pendingPaymentCents),
-                          sub: "customer unpaid",
-                          cls: "bg-amber-50 border-amber-100 text-amber-900",
-                        },
-                        {
-                          label: "Pending Payout",
-                          value: moneyCompact(seller.pendingPayoutCents),
-                          sub: "owed to seller",
-                          cls: "bg-rose-50 border-rose-100 text-rose-900",
-                        },
-                        {
-                          label: "Paid Out",
-                          value: moneyCompact(seller.paidPayoutCents),
-                          sub: "recorded",
-                          cls: "bg-emerald-50 border-emerald-100 text-emerald-900",
-                        },
-                      ].map(({ label, value, sub, cls }) => (
-                        <div key={label} className={`rounded-2xl border p-2.5 ${cls}`}>
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                            {label}
+                  <div className="space-y-4 border-t border-slate-100 bg-gradient-to-b from-slate-50 to-white px-4 py-4 md:px-5">
+                    {/* Sales performance */}
+                    <div>
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Sales performance</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: "Today", cents: seller.dailySalesCents, orders: seller.dailyOrders },
+                          { label: "7 days", cents: seller.weeklySalesCents, orders: seller.weeklyOrders },
+                          { label: "This month", cents: seller.monthlySalesCents, orders: seller.monthlyOrders },
+                        ].map(({ label, cents, orders }) => (
+                          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+                            <div className="mt-0.5 truncate text-sm font-bold tabular-nums text-slate-900">{moneyCompact(cents)}</div>
+                            <div className="text-[10px] text-slate-400">{orders} order{orders === 1 ? "" : "s"}</div>
+                            <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-slate-900"
+                                style={{ width: `${Math.max(cents > 0 ? 6 : 0, Math.round((cents / maxSales) * 100))}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="text-sm font-bold mt-0.5">{value}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
 
-                    {/* Products collapsible */}
-                    <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
-                      <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
-                        <span className="text-sm font-semibold text-slate-900">
-                          Products{" "}
-                          <span className="font-normal text-slate-400">({seller.productList.length})</span>
-                        </span>
-                        <svg
-                          className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </summary>
-                      <div className="border-t border-slate-100 max-h-60 overflow-y-auto divide-y divide-slate-50">
-                        {seller.productList.length === 0 ? (
-                          <p className="px-4 py-3 text-sm text-slate-400">No products.</p>
-                        ) : (
-                          seller.productList.map((product) => (
-                            <div
-                              key={product.id}
-                              className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm text-slate-900 truncate">{product.name}</div>
-                                <div className="text-[11px] text-slate-400">
-                                  Stock: {product.stock} ·{" "}
-                                  {product.createdAt
-                                    ? new Date(product.createdAt).toLocaleDateString()
-                                    : "—"}
-                                </div>
-                              </div>
-                              <span
-                                className={[
-                                  "ml-3 shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
-                                  product.status === "approved" && product.isActive
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : product.status === "submitted"
-                                    ? "bg-sky-100 text-sky-700"
-                                    : product.status === "delisted" || !product.isActive
-                                    ? "bg-rose-100 text-rose-700"
-                                    : product.status === "rejected"
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-slate-100 text-slate-500",
-                                ].join(" ")}
-                              >
-                                {product.status === "approved" && product.isActive
-                                  ? "Live"
-                                  : !product.isActive
-                                  ? "Inactive"
-                                  : product.status}
-                              </span>
-                            </div>
-                          ))
-                        )}
+                    {/* Payments & payouts */}
+                    <div>
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Payments & payouts</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-600/80">Pending pay</div>
+                          <div className="mt-0.5 truncate text-sm font-bold tabular-nums text-amber-900">{moneyCompact(seller.pendingPaymentCents)}</div>
+                          <div className="text-[10px] text-amber-600/60">customer unpaid</div>
+                        </div>
+                        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-rose-600/80">Pending payout</div>
+                          <div className="mt-0.5 truncate text-sm font-bold tabular-nums text-rose-900">{moneyCompact(seller.pendingPayoutCents)}</div>
+                          <div className="text-[10px] text-rose-600/60">owed to seller</div>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600/80">Paid out</div>
+                          <div className="mt-0.5 truncate text-sm font-bold tabular-nums text-emerald-900">{moneyCompact(seller.paidPayoutCents)}</div>
+                          <div className="text-[10px] text-emerald-600/60">recorded</div>
+                        </div>
                       </div>
-                    </details>
+                    </div>
 
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      {/* Top products collapsible */}
-                      <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
-                        <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
-                          <span className="text-sm font-semibold text-slate-900">
-                            Top Products{" "}
-                            <span className="font-normal text-slate-400">({seller.topProducts.length})</span>
-                          </span>
-                          <svg
-                            className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden="true"
+                    {/* Tabbed lists */}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      <div className="flex border-b border-slate-100" role="tablist" aria-label="Seller details">
+                        {([
+                          { key: "products" as const, label: "Products", count: seller.productList.length },
+                          { key: "top" as const, label: "Top sellers", count: seller.topProducts.length },
+                          { key: "stock" as const, label: "Stock alerts", count: seller.stockAlerts.length },
+                        ]).map(({ key, label, count }) => (
+                          <button
+                            key={key}
+                            role="tab"
+                            aria-selected={expandedTab === key}
+                            onClick={() => setExpandedTab(key)}
+                            className={`flex-1 px-2 py-2.5 text-xs font-semibold transition-colors ${
+                              expandedTab === key
+                                ? "border-b-2 border-slate-900 text-slate-900"
+                                : "border-b-2 border-transparent text-slate-400 hover:text-slate-600"
+                            }`}
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </summary>
-                        <div className="border-t border-slate-100 divide-y divide-slate-50">
-                          {seller.topProducts.length === 0 ? (
-                            <p className="px-4 py-3 text-sm text-slate-400">No sales yet.</p>
+                            {label}
+                            <span
+                              className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                                key === "stock" && count > 0
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="max-h-64 divide-y divide-slate-50 overflow-y-auto">
+                        {expandedTab === "products" &&
+                          (seller.productList.length === 0 ? (
+                            <p className="px-4 py-4 text-center text-sm text-slate-400">No products.</p>
+                          ) : (
+                            seller.productList.map((product) => (
+                              <div
+                                key={product.id}
+                                className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm text-slate-900">{product.name}</div>
+                                  <div className="text-[11px] text-slate-400">
+                                    Stock: {product.stock} ·{" "}
+                                    {product.createdAt
+                                      ? new Date(product.createdAt).toLocaleDateString()
+                                      : "—"}
+                                  </div>
+                                </div>
+                                <span
+                                  className={[
+                                    "ml-3 shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
+                                    product.status === "approved" && product.isActive
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : product.status === "submitted"
+                                      ? "bg-sky-100 text-sky-700"
+                                      : product.status === "delisted" || !product.isActive
+                                      ? "bg-rose-100 text-rose-700"
+                                      : product.status === "rejected"
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-slate-100 text-slate-500",
+                                  ].join(" ")}
+                                >
+                                  {product.status === "approved" && product.isActive
+                                    ? "Live"
+                                    : !product.isActive
+                                    ? "Inactive"
+                                    : product.status}
+                                </span>
+                              </div>
+                            ))
+                          ))}
+
+                        {expandedTab === "top" &&
+                          (seller.topProducts.length === 0 ? (
+                            <p className="px-4 py-4 text-center text-sm text-slate-400">No sales yet.</p>
                           ) : (
                             seller.topProducts.map((product, i) => (
                               <div
                                 key={`${seller.id}-${product.productId}-${i}`}
                                 className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
                               >
-                                <div className="min-w-0">
-                                  <div className="text-sm text-slate-900 truncate">{product.name}</div>
-                                  <div className="text-[11px] text-slate-400">{product.unitsSold} sold</div>
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">
+                                    {i + 1}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm text-slate-900">{product.name}</div>
+                                    <div className="text-[11px] text-slate-400">{product.unitsSold} sold</div>
+                                  </div>
                                 </div>
-                                <div className="text-sm font-semibold text-slate-900 ml-3 shrink-0">
+                                <div className="ml-3 shrink-0 text-sm font-semibold tabular-nums text-slate-900">
                                   {moneyCompact(product.revenueCents)}
                                 </div>
                               </div>
                             ))
-                          )}
-                        </div>
-                      </details>
+                          ))}
 
-                      {/* Stock alerts collapsible */}
-                      <details className="group rounded-[20px] border border-slate-200 bg-white overflow-hidden">
-                        <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between select-none hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-900">Stock Alerts</span>
-                            {seller.stockAlerts.length > 0 && (
-                              <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                                {seller.stockAlerts.length}
-                              </span>
-                            )}
-                          </div>
-                          <svg
-                            className="h-4 w-4 text-slate-400 transition-transform duration-150 group-open:rotate-180"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </summary>
-                        <div className="border-t border-slate-100 divide-y divide-slate-50">
-                          {seller.stockAlerts.length === 0 ? (
-                            <p className="px-4 py-3 text-sm text-slate-400">No stock issues.</p>
+                        {expandedTab === "stock" &&
+                          (seller.stockAlerts.length === 0 ? (
+                            <p className="px-4 py-4 text-center text-sm text-slate-400">No stock issues.</p>
                           ) : (
                             seller.stockAlerts.map((alert) => (
                               <div
@@ -810,7 +888,7 @@ export default function AdminApprovedSellersPage() {
                                 className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50"
                               >
                                 <div className="min-w-0">
-                                  <div className="text-sm text-slate-900 truncate">{alert.name}</div>
+                                  <div className="truncate text-sm text-slate-900">{alert.name}</div>
                                   <div className="text-[11px] text-slate-400">
                                     {alert.level === "out" ? "Out of stock" : "Low stock"}
                                   </div>
@@ -827,15 +905,15 @@ export default function AdminApprovedSellersPage() {
                                 </span>
                               </div>
                             ))
-                          )}
-                        </div>
-                      </details>
+                          ))}
+                      </div>
                     </div>
                   </div>
                 )}
               </article>
             );
           })}
+          </div>
         </section>
       )}
     </main>
