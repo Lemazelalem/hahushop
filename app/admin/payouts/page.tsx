@@ -682,58 +682,69 @@ export default function AdminSellerPayoutsPage() {
           {filteredSellerStats.map((s) => (
             <div key={s.seller_id}>
               {/* Collapsed row */}
-              <div className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-slate-50/60 transition-colors">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
+              <div className="px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 hover:bg-slate-50/60 transition-colors">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
                     {s.name.charAt(0).toUpperCase()}
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="font-semibold text-slate-900 text-sm truncate">{s.name}</span>
                       {s.totalPendingCents > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                          Payout due
-                        </span>
+                        <span
+                          className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
+                          title="Payout due"
+                          aria-label="Payout due"
+                        />
                       )}
                     </div>
-                    <div className="text-xs text-slate-400 mt-0.5">{s.contact}</div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {s.approved > 0 && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">{s.approved} live</span>
-                      )}
-                      {s.submitted > 0 && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">{s.submitted} in review</span>
-                      )}
-                      {s.delisted > 0 && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-100">{s.delisted} delisted</span>
-                      )}
-                      {s.approved === 0 && s.submitted === 0 && s.delisted === 0 && (
-                        <span className="text-[10px] text-slate-400">No products</span>
+                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                      <span>{s.contact}</span>
+                      <span className="mx-1 text-slate-300">·</span>
+                      {s.approved === 0 && s.submitted === 0 && s.delisted === 0 ? (
+                        <span>No products</span>
+                      ) : (
+                        <>
+                          {s.approved > 0 && (
+                            <span className="text-emerald-600 font-medium">{s.approved} live</span>
+                          )}
+                          {s.submitted > 0 && (
+                            <>
+                              {s.approved > 0 && <span className="mx-1 text-slate-300">·</span>}
+                              <span className="text-sky-600 font-medium">{s.submitted} in review</span>
+                            </>
+                          )}
+                          {s.delisted > 0 && (
+                            <>
+                              {(s.approved > 0 || s.submitted > 0) && <span className="mx-1 text-slate-300">·</span>}
+                              <span>{s.delisted} delisted</span>
+                            </>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6 shrink-0 pl-[52px] sm:pl-0">
+                <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 pl-[42px] sm:pl-0">
                   <div className="text-left sm:text-right">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pending</div>
-                    <div className={`text-sm font-bold tabular-nums ${s.totalPendingCents > 0 ? "text-amber-700" : "text-slate-300"}`}>
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400 leading-none">Pending</div>
+                    <div className={`text-[13px] font-bold tabular-nums mt-0.5 ${s.totalPendingCents > 0 ? "text-amber-700" : "text-slate-300"}`}>
                       {formatMoney(s.totalPendingCents)}
                     </div>
                   </div>
                   <div className="text-left sm:text-right">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Paid</div>
-                    <div className="text-sm font-bold tabular-nums text-emerald-700">
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400 leading-none">Paid</div>
+                    <div className="text-[13px] font-bold tabular-nums text-emerald-700 mt-0.5">
                       {formatMoney(s.totalPaidCents)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       disabled={s.totalPendingCents <= 0}
                       onClick={() => openRecordModal(s)}
-                      className={`text-xs font-semibold px-3.5 py-2 rounded-xl transition-all ${
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
                         s.totalPendingCents <= 0
                           ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                           : "bg-slate-900 text-white hover:bg-slate-800 shadow-sm shadow-slate-900/10"
@@ -750,7 +761,7 @@ export default function AdminSellerPayoutsPage() {
                       }
                       aria-expanded={expandedSellerId === s.seller_id}
                       aria-controls={`seller-payout-${s.seller_id}`}
-                      className="text-xs font-semibold text-slate-600 border border-slate-200 bg-white rounded-xl px-3 py-2 hover:bg-slate-50 transition-colors"
+                      className="text-xs font-semibold text-slate-600 border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 hover:bg-slate-50 transition-colors"
                     >
                       {expandedSellerId === s.seller_id ? "Hide" : "Details"}
                     </button>
