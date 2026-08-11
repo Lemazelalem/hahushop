@@ -601,6 +601,7 @@ export default function SellerDashboardPage() {
   const switchTab = (tab: "home" | "orders" | "stock" | "more") => {
     setActiveTab(tab);
     sessionStorage.setItem("sellerActiveTab", tab);
+    window.scrollTo(0, 0);
   };
 
   useEffect(() => {
@@ -1254,8 +1255,8 @@ export default function SellerDashboardPage() {
 
       {/* Top Navigation */}
       <header className="sticky top-0 z-40 glass-morphism border-b border-slate-200/40 px-4 md:px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
             <button
               onClick={() => setIsDrawerOpen(true)}
               className="p-2 rounded-xl hover:bg-slate-100/80 transition-colors flex-shrink-0"
@@ -1263,20 +1264,20 @@ export default function SellerDashboardPage() {
             >
               <Menu className="w-5 h-5 text-slate-700" />
             </button>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-lime-400 to-blue-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-lime-400 to-blue-500 flex items-center justify-center flex-shrink-0">
               <Store className="w-5 h-5 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1
-                className="font-bold text-slate-900 cursor-pointer hover:text-lime-700 transition-colors"
+                className="font-bold text-slate-900 cursor-pointer hover:text-lime-700 transition-colors truncate text-sm md:text-base"
                 onClick={() => setActiveTab("home")}
                 title="Go to Home"
               >Seller Dashboard · የሻጭ ዳሽቦርድ</h1>
-              <p className="text-xs text-slate-500">Manage your store</p>
+              <p className="text-xs text-slate-500 truncate">Manage your store</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
             <button
               onClick={() => router.push("/")}
               className="p-2 rounded-lg hover:bg-slate-100/80 transition-colors"
@@ -2674,21 +2675,21 @@ export default function SellerDashboardPage() {
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3">
               <button
-                onClick={() => { setActiveTab("more"); setStatusFilter("all"); }}
+                onClick={() => { switchTab("more"); setStatusFilter("all"); }}
                 className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-slate-300"
               >
                 <span className="text-2xl font-black text-slate-900 block">{stats.total}</span>
                 <span className="text-[10px] text-slate-500">Products</span>
               </button>
               <button
-                onClick={() => { setActiveTab("more"); setStatusFilter("approved"); }}
+                onClick={() => { switchTab("more"); setStatusFilter("approved"); }}
                 className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-emerald-300"
               >
                 <span className="text-2xl font-black text-emerald-700 block">{stats.approved}</span>
                 <span className="text-[10px] text-emerald-600">Live</span>
               </button>
               <button
-                onClick={() => setActiveTab("stock")}
+                onClick={() => switchTab("stock")}
                 className="glass-card rounded-xl p-3 text-center active:scale-95 transition-transform hover:ring-2 hover:ring-amber-300"
               >
                 <span className="text-2xl font-black text-amber-700 block">{soldTodayTotal}</span>
@@ -3297,7 +3298,7 @@ export default function SellerDashboardPage() {
       </div>
 
       {/* ── MOBILE BOTTOM NAV BAR ── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/60 px-1 pt-1 pb-2">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/60 px-1 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-end justify-around max-w-sm mx-auto">
           {/* Home */}
           <button

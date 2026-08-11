@@ -102,6 +102,14 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+/* Opaque-ish glass for sticky bars/cards (no border shorthand so Tailwind border utilities still apply) */
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.05);
+}
+
 .glass-ring {
   position: relative;
 }
