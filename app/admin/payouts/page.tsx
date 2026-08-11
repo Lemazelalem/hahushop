@@ -579,9 +579,9 @@ export default function AdminSellerPayoutsPage() {
   // ------------------------------
   if (checking) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 md:py-8">
+      <main className="min-h-screen bg-slate-50 py-6 md:py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="backdrop-blur-xl bg-white/60 rounded-3xl border border-white/50 shadow-xl shadow-slate-200/50 p-8 text-center">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 text-center">
             <div className="inline-flex items-center gap-3 text-slate-600">
               <div className="w-5 h-5 border-2 border-slate-400/30 border-t-slate-600 rounded-full animate-spin" />
               <span className="text-sm font-medium">Checking admin access...</span>
@@ -604,7 +604,7 @@ export default function AdminSellerPayoutsPage() {
   return (
     <main className="py-4 md:py-6 space-y-4">
       {/* Compact header */}
-      <section className="glass glass-ring rounded-[28px] p-5 md:p-6">
+      <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 md:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Admin</div>
@@ -634,12 +634,12 @@ export default function AdminSellerPayoutsPage() {
               {filteredTotals.payoutRows} transaction{filteredTotals.payoutRows === 1 ? "" : "s"}
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200/70 bg-white/60 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Active sellers</div>
             <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">{filteredSellerStats.length}</div>
             <div className="mt-0.5 text-[11px] text-slate-500">{filteredTotals.products} products</div>
           </div>
-          <div className="rounded-2xl border border-slate-200/70 bg-white/60 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Lifetime recorded</div>
             <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">{formatMoneyCompact(filteredTotals.recordedCents)}</div>
             <div className="mt-0.5 text-[11px] text-slate-500">pending + paid</div>
@@ -663,22 +663,22 @@ export default function AdminSellerPayoutsPage() {
       </section>
 
       {errorMsg && (
-        <div className="glass glass-ring rounded-[24px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           {errorMsg}
         </div>
       )}
 
       {loading ? (
-        <div className="glass glass-ring rounded-[28px] p-8 text-center text-sm text-slate-500">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 text-center text-sm text-slate-500">
           Loading seller data...
         </div>
       ) : filteredSellerStats.length === 0 ? (
-        <div className="glass glass-ring rounded-[28px] p-10 text-center">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-10 text-center">
           <div className="text-lg font-bold text-slate-900">No sellers found</div>
           <div className="mt-1 text-sm text-slate-500">Try adjusting your search terms</div>
         </div>
       ) : (
-        <section className="glass glass-ring rounded-[28px] divide-y divide-slate-100 overflow-hidden">
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
           {filteredSellerStats.map((s) => (
             <div key={s.seller_id}>
               {/* Collapsed row */}
@@ -761,13 +761,13 @@ export default function AdminSellerPayoutsPage() {
                   {expandedSellerId === s.seller_id && (
                     <div
                       id={`seller-payout-${s.seller_id}`}
-                      className="border-t border-slate-200/60 bg-slate-50/50 backdrop-blur-sm"
+                      className="border-t border-slate-100 bg-slate-50"
                       role="region"
                       aria-label={`${s.name} payout details`}
                     >
                       <div className="p-5 md:p-6 space-y-4">
-                        <div className="bg-white/60 rounded-xl border border-white/60 overflow-hidden">
-                          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200/60 flex items-center justify-between">
+                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -819,8 +819,8 @@ export default function AdminSellerPayoutsPage() {
                           </div>
                         </div>
 
-                        <div className="bg-white/60 rounded-xl border border-white/60 overflow-hidden">
-                          <div className="px-4 py-3 bg-slate-100/50 border-b border-slate-200/60 flex items-center justify-between">
+                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
