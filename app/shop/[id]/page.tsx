@@ -8,6 +8,7 @@ import type { ItemMeta } from "@/components/MiniCartProvider";
 import { flyToCart } from "@/lib/flyToCart";
 import { ShoppingCart, Check, Minus, Plus, X } from "lucide-react";
 import { getCached, setCached, productCacheKey } from "@/lib/productCache";
+import { useLoadingTimeout, useResumeRefresh } from "../_useResumeRefresh";
 
 type ProductStatus = "draft" | "submitted" | "approved" | "rejected" | "archived";
 
@@ -148,6 +149,7 @@ export default function ProductDetailPage() {
   const [rateMsg, setRateMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const rateSectionRef = useRef<HTMLDivElement | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const cartQuantity = useMemo(() => {
     if (!product) return 0;
@@ -171,6 +173,7 @@ export default function ProductDetailPage() {
     }
 
     const productIdForLoad = currentProductId;
+    let cancelled = false;
 
     async function load() {
       setPageError(null);
@@ -187,8 +190,16 @@ export default function ProductDetailPage() {
       }
 
       try {
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData?.user?.id ?? null;
+        // Read the session locally (no network round-trip). getUser() hits the
+        // auth server and can hang after a WebView resume, blocking the product.
+        let uid: string | null = null;
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          uid = sessionData?.session?.user?.id ?? null;
+        } catch {
+          uid = null;
+        }
+        if (cancelled) return;
         setUserId(uid);
 
         const { data: productData, error: productError } = await supabase
@@ -217,6 +228,8 @@ export default function ProductDetailPage() {
           .eq("is_active", true)
           .maybeSingle();
 
+        if (cancelled) return;
+
         if (productError) {
           console.warn("Load product error:", productError);
           setPageError(productError.message || "Could not load product.");
@@ -243,9 +256,9 @@ export default function ProductDetailPage() {
         await loadRatings(productIdForLoad, uid);
       } catch (err) {
         console.error("Unexpected error loading product detail:", err);
-        setPageError("Unexpected error while loading product.");
+        if (!cancelled) setPageError("Unexpected error while loading product.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -284,18 +297,37 @@ export default function ProductDetailPage() {
           if (myRow) myRating = (myRow as any).rating;
         }
 
+        if (cancelled) return;
+
         setRatingStats({
           avg,
           count,
           myRating,
         });
       } finally {
-        setRatingLoading(false);
+        if (!cancelled) setRatingLoading(false);
       }
     }
 
     load();
-  }, [currentProductId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProductId, reloadKey]);
+
+  // Recover from a frozen WebView / flaky network: reopening the app re-fetches
+  // instead of leaving a permanent skeleton.
+  useResumeRefresh(() => {
+    setReloadKey((k) => k + 1);
+  });
+
+  // Safety net: if the product fetch hangs (e.g. auth lock after resume), unblock
+  // the UI and offer a retry instead of an endless blank skeleton.
+  useLoadingTimeout(loading, () => {
+    setLoading(false);
+    setPageError("Loading timed out. Tap Retry to try again.");
+  });
 
   const selColor = useMemo(
     () => product?.color_variants?.find((c) => c.id === selColorId) ?? null,
@@ -521,24 +553,39 @@ export default function ProductDetailPage() {
           </button>
 
           {pageError && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 mb-4">
-              {pageError}
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 mb-4 flex items-center justify-between gap-3">
+              <span className="text-sm text-rose-700">{pageError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPageError(null);
+                  setLoading(true);
+                  setReloadKey((k) => k + 1);
+                }}
+                className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 transition-colors"
+              >
+                Retry
+              </button>
             </div>
           )}
         </div>
 
         <div className="overflow-hidden md:bg-white md:rounded-2xl md:shadow-sm md:border md:border-slate-200">
-          {loading || !product ? (
-            <div className="p-8 animate-pulse">
-              <div className="grid gap-8 md:grid-cols-2">
-                <div className="aspect-square bg-slate-200 rounded-xl" />
-                <div className="space-y-4">
-                  <div className="h-8 w-3/4 bg-slate-200 rounded-lg" />
-                  <div className="h-4 w-1/2 bg-slate-200 rounded-lg" />
-                  <div className="h-24 bg-slate-200 rounded-lg" />
+          {!product ? (
+            // Hide the skeleton once an error is shown above so we don't leave a
+            // permanent shimmer under the error message.
+            loading || !pageError ? (
+              <div className="p-8 animate-pulse">
+                <div className="grid gap-8 md:grid-cols-2">
+                  <div className="aspect-square bg-slate-200 rounded-xl" />
+                  <div className="space-y-4">
+                    <div className="h-8 w-3/4 bg-slate-200 rounded-lg" />
+                    <div className="h-4 w-1/2 bg-slate-200 rounded-lg" />
+                    <div className="h-24 bg-slate-200 rounded-lg" />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null
           ) : (
             <div className="grid md:grid-cols-2 gap-0">
               <div className="pb-4 md:p-8 md:bg-slate-50">
