@@ -1,6 +1,6 @@
 "use client";
 
-import { type MouseEvent, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useMiniCart } from "@/components/MiniCartProvider";
@@ -79,12 +79,14 @@ function StarsRow({
 }: {
   value: number;
   onChange?: (v: number) => void;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
 }) {
   const isInteractive = !!onChange;
   const starClass =
     size === "sm"
       ? "text-[14px] leading-none"
+      : size === "lg"
+      ? "text-[30px] md:text-[32px] leading-none"
       : "text-[18px] md:text-[20px] leading-none";
 
   return (
@@ -100,7 +102,7 @@ function StarsRow({
             disabled={!isInteractive}
             className={[
               "transition-transform",
-              isInteractive ? "hover:-translate-y-[1px] active:scale-95" : "",
+              isInteractive ? "px-0.5 py-1 hover:-translate-y-[1px] active:scale-95" : "",
             ].join(" ")}
           >
             <span
@@ -143,6 +145,8 @@ export default function ProductDetailPage() {
   });
   const [ratingLoading, setRatingLoading] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const [rateMsg, setRateMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const rateSectionRef = useRef<HTMLDivElement | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   const cartQuantity = useMemo(() => {
@@ -435,7 +439,7 @@ export default function ProductDetailPage() {
     if (!product || !product.id) return;
 
     if (!userId) {
-      setPageError("You must be signed in to rate this product.");
+      setRateMsg({ kind: "err", text: "You must be signed in to rate this product." });
       return;
     }
 
@@ -443,7 +447,7 @@ export default function ProductDetailPage() {
 
     try {
       setRatingSaving(true);
-      setPageError(null);
+      setRateMsg(null);
 
       const { error } = await supabase.from("product_ratings").upsert(
         {
@@ -458,7 +462,7 @@ export default function ProductDetailPage() {
 
       if (error) {
         console.error("Save rating error:", error);
-        setPageError(error.message || "Could not save rating.");
+        setRateMsg({ kind: "err", text: error.message || "Could not save rating." });
         return;
       }
 
@@ -486,9 +490,11 @@ export default function ProductDetailPage() {
         count: newCount,
         myRating: safeValue,
       });
+      setRateMsg({ kind: "ok", text: "Thanks! Your rating was saved." });
+      window.setTimeout(() => setRateMsg(null), 3000);
     } catch (err) {
       console.error("Unexpected rating error:", err);
-      setPageError("Unexpected error while saving rating.");
+      setRateMsg({ kind: "err", text: "Unexpected error while saving rating." });
     } finally {
       setRatingSaving(false);
     }
@@ -602,6 +608,15 @@ export default function ProductDetailPage() {
                       </span>
                     )}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      rateSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+                    }
+                    className="text-[13px] md:text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Rate it
+                  </button>
                 </div>
 
                 {/* Variant error */}
@@ -822,27 +837,53 @@ export default function ProductDetailPage() {
                   </p>
                 </div>
 
-                <div className="border-t border-slate-100 pt-6">
+                <div ref={rateSectionRef} className="border-t border-slate-100 pt-6">
                   <h3 className="text-[13px] md:text-sm font-bold text-slate-900 mb-3">
                     Rate this product
                   </h3>
 
                   {userId ? (
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-[13px] md:text-sm text-slate-600">Your rating:</span>
-                      <StarsRow
-                        value={ratingStats.myRating || 0}
-                        onChange={handleRate}
-                        size="md"
-                      />
-                      {ratingSaving && (
-                        <span className="text-xs text-slate-500">Saving...</span>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <StarsRow
+                          value={ratingStats.myRating || 0}
+                          onChange={handleRate}
+                          size="lg"
+                        />
+                        {ratingSaving && (
+                          <span className="text-xs text-slate-500">Saving...</span>
+                        )}
+                      </div>
+                      {rateMsg ? (
+                        <p
+                          className={`text-xs font-medium ${
+                            rateMsg.kind === "ok" ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                          role="status"
+                        >
+                          {rateMsg.text}
+                        </p>
+                      ) : ratingStats.myRating ? (
+                        <p className="text-xs text-slate-500">
+                          You rated this {ratingStats.myRating}/5 — tap a star to change it.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-slate-400">Tap a star to rate.</p>
                       )}
                     </div>
                   ) : (
-                    <p className="text-[13px] md:text-sm text-slate-500">
-                      Sign in to rate this product.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          `/auth/login?returnUrl=${encodeURIComponent(`/shop/${product.id}`)}`
+                        )
+                      }
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] md:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <span className="text-amber-400 text-base leading-none">{"\u2605"}</span>
+                      Sign in to rate this product
+                    </button>
                   )}
                 </div>
               </div>
